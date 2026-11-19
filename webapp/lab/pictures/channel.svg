@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" width="320" height="180">
+  <title>Lab channel picture</title>
+  <!-- A plain stand-in for a 24/7 channel's picture: a dusk sky over two hills. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2d3a5c"/>
+      <stop offset="1" stop-color="#b9806a"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="180" fill="url(#sky)"/>
+  <circle cx="226" cy="98" r="22" fill="#f3d9a4"/>
+  <path d="M0 140 Q80 96 170 132 T320 120 L320 180 L0 180 Z" fill="#26304a"/>
+  <path d="M0 160 Q110 130 220 156 T320 150 L320 180 L0 180 Z" fill="#171d2e"/>
+</svg>

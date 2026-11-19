@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="192" height="192">
+  <title>Matty</title>
+  <!-- The Matty app's launcher icon in its round shape, with a rim that still shows at 20 pixels on a white ground -->
+  <circle cx="54" cy="54" r="34.5" fill="#ffffff" stroke="#c4c9d0" stroke-width="3"/>
+  <path fill="#000000" fill-rule="evenodd" d="M32,76 Q41.63,71.67 52.18,71.63 A20,20 0 1,0 36.37,55.82 Q36.33,66.37 32,76 Z M44.5,52 a11.5,11.5 0 1,0 23,0 a11.5,11.5 0 1,0 -23,0 Z"/>
+</svg>

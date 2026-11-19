@@ -1,0 +1,4 @@
+{
+  "payload": "{\"streams\":[{\"handle\":\"h1\",\"title\":\"Dave\",\"paused\":false,\"alwaysOn\":false,\"viewers\":2,\"bitrate\":0,\"videoTracks\":0,\"audioTracks\":0,\"userId\":\"u-dave\"}],\"boards\":{\"version\":\"d1104088293df0cc\"},\"banners\":{\"version\":\"44136fa355b3678a\"},\"people\":{\"u-dave\":{\"live\":\"h1\"}},\"fetchedAt\":1790942400000,\"configured\":true}",
+  "tag": "ff8fd9d2232eee31"
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <title>Lab ghost</title>
+  <!-- A plain stand-in for a No Signal ghost a server's admin uploads: a pale round figure with two eyes. -->
+  <path d="M40 180 L40 92 A60 60 0 0 1 160 92 L160 180 L140 164 L120 180 L100 164 L80 180 L60 164 Z" fill="#d9dce2"/>
+  <circle cx="78" cy="96" r="11" fill="#3a3f4a"/>
+  <circle cx="122" cy="96" r="11" fill="#3a3f4a"/>
+</svg>

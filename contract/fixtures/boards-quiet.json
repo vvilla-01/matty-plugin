@@ -1,0 +1,152 @@
+{
+  "version": "VERSION",
+  "allTime": [
+    {
+      "rank": 1,
+      "title": "Dave",
+      "seconds": 7200,
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave"
+    },
+    {
+      "rank": 2,
+      "title": "Bob Turner",
+      "seconds": 3600,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner"
+    },
+    {
+      "rank": 3,
+      "title": "Dan's stream",
+      "seconds": 1800
+    }
+  ],
+  "month": [
+    {
+      "rank": 1,
+      "title": "Bob Turner",
+      "seconds": 600,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner"
+    },
+    {
+      "rank": 2,
+      "title": "Dan's stream",
+      "seconds": 450
+    },
+    {
+      "rank": 3,
+      "title": "Dave",
+      "seconds": 300,
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave"
+    }
+  ],
+  "monthLabel": "MONTH",
+  "allTimeTotal": 3,
+  "monthTotal": 3,
+  "monthMedals": [
+    {
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner",
+      "gold": [
+        "2026-06"
+      ],
+      "silver": [
+        "2026-05"
+      ]
+    },
+    {
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave",
+      "gold": [
+        "2026-05"
+      ],
+      "silver": [
+        "2026-06"
+      ]
+    }
+  ],
+  "people": {
+    "u-bob": {
+      "rows": [
+        {
+          "kind": "board",
+          "id": "alltime",
+          "rank": 2,
+          "title": "Runner-up",
+          "board": "All time",
+          "seconds": 3600
+        },
+        {
+          "kind": "board",
+          "id": "month",
+          "rank": 1,
+          "title": "Champion",
+          "board": "MONTH",
+          "seconds": 600
+        },
+        {
+          "kind": "months",
+          "id": "past",
+          "rank": 1,
+          "title": "Monthly champion",
+          "gold": [
+            "2026-06"
+          ],
+          "tallies": [
+            {
+              "rank": 2,
+              "months": [
+                "2026-05"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "u-dave": {
+      "rows": [
+        {
+          "kind": "board",
+          "id": "alltime",
+          "rank": 1,
+          "title": "Champion",
+          "board": "All time",
+          "seconds": 7200
+        },
+        {
+          "kind": "board",
+          "id": "month",
+          "rank": 3,
+          "title": "Third place",
+          "board": "MONTH",
+          "seconds": 300
+        },
+        {
+          "kind": "months",
+          "id": "past",
+          "rank": 1,
+          "title": "Monthly champion",
+          "gold": [
+            "2026-05"
+          ],
+          "tallies": [
+            {
+              "rank": 2,
+              "months": [
+                "2026-06"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

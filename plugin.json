@@ -1,0 +1,947 @@
+{
+    "id": "ceo.villa.matty",
+    "name": "Matty",
+    "description": "The companion to Matty, the Android app for Mattermost: your own Broadcast Box's live streams in a panel, with clips, plans, awards, voice and more. Unlocked with your own bearer token.",
+    "homepage_url": "https://github.com/vvilla-01/matty-plugin",
+    "support_url": "https://github.com/vvilla-01/matty-plugin/issues",
+    "icon_path": "assets/icon.svg",
+    "version": "4.2.0",
+    "min_server_version": "11.11.0",
+    "server": {
+        "executables": {
+            "linux-amd64": "server/dist/plugin-linux-amd64",
+            "linux-arm64": "server/dist/plugin-linux-arm64",
+            "darwin-amd64": "server/dist/plugin-darwin-amd64",
+            "darwin-arm64": "server/dist/plugin-darwin-arm64",
+            "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+        }
+    },
+    "webapp": {
+        "bundle_path": "webapp/dist/main.js"
+    },
+    "settings_schema": {
+        "header": "Set the **Broadcast Box URL** below and save, then open Matty from the App Bar. Everybody, you included, unlocks it with the bearer token their streaming software publishes with; see **Access**.",
+        "sections": [
+            {
+                "key": "origin",
+                "title": "Broadcast Box",
+                "subtitle": "Where the streams come from. The URL is the one setting Matty needs.",
+                "settings": [
+                    {
+                        "key": "BroadcastBoxURL",
+                        "display_name": "Broadcast Box URL",
+                        "type": "text",
+                        "help_text": "The address this Mattermost server uses to reach Broadcast Box, with no trailing slash. Use the direct LAN address: it skips the reverse proxy, its Basic Auth and its rate limiting. Browsers never use this address: Matty relays each playback request, and the picture and sound then reach each viewer's browser over UDP from Broadcast Box's media port.",
+                        "placeholder": "http://192.168.1.20:8080",
+                        "default": ""
+                    },
+                    {
+                        "key": "BasicAuthUsername",
+                        "display_name": "Basic Auth username",
+                        "type": "text",
+                        "help_text": "Only if the URL goes through a proxy with HTTP Basic Auth. Leave blank for the direct LAN address.",
+                        "default": ""
+                    },
+                    {
+                        "key": "BasicAuthPassword",
+                        "display_name": "Basic Auth password",
+                        "type": "text",
+                        "secret": true,
+                        "help_text": "The proxy's Basic Auth password, if it has one. Kept as plain text in Mattermost's configuration, and masked on this page. Matty never sends it to a browser; settings backups leave it out unless you include passwords.",
+                        "default": ""
+                    },
+                    {
+                        "key": "PollIntervalSeconds",
+                        "display_name": "Refresh interval (seconds)",
+                        "type": "number",
+                        "help_text": "How often Matty asks Broadcast Box who is live.",
+                        "default": 15
+                    },
+                    {
+                        "key": "OfflineGraceChecks",
+                        "display_name": "Missed checks before a badge comes off",
+                        "type": "number",
+                        "help_text": "How many checks in a row a stream must be missing before its live badge comes off, its **What's on?** is taken down and its Clips recording stops. A check is one **Refresh interval**; the extra checks a save or somebody's click asks for do not count. Stops flicker when OBS reconnects.",
+                        "default": 2
+                    },
+                    {
+                        "key": "PublicSiteURL",
+                        "display_name": "Public watch URL",
+                        "type": "text",
+                        "help_text": "Broadcast Box's public page, used only for the panel's **Pop out**, which only people who have linked a stream get. It goes through Matty, so no stream key is in what other browsers receive, but the page it opens has the key in its address, and that key keeps working after an unlink. Leave blank unless you need it, and when Broadcast Box runs with `DISABLE_FRONTEND` or its public site is publish-only.",
+                        "placeholder": "https://tv.example.com",
+                        "default": ""
+                    }
+                ]
+            },
+            {
+                "key": "access",
+                "title": "Access",
+                "subtitle": "Locked until each person enters their own bearer token, and who may watch without one.",
+                "settings": [
+                    {
+                        "key": "AccessList",
+                        "display_name": "Let in without a token",
+                        "type": "custom",
+                        "help_text": "People let in here can watch streams and clips without a token, but cannot use What's on?, clip, vote, share or plan. The System Console works without a token."
+                    }
+                ]
+            },
+            {
+                "key": "appcheck",
+                "title": "App check",
+                "subtitle": "Whether a phone's Matty is the official signed build, on Android's own word.",
+                "settings": [
+                    {
+                        "key": "AppCheck",
+                        "display_name": "Check the Matty app",
+                        "type": "dropdown",
+                        "default": "report",
+                        "options": [
+                            {
+                                "display_name": "Off",
+                                "value": "off"
+                            },
+                            {
+                                "display_name": "Check, and show the result",
+                                "value": "report"
+                            },
+                            {
+                                "display_name": "Check, and refuse a Matty that fails",
+                                "value": "require"
+                            }
+                        ],
+                        "help_text": "When Matty opens, it asks the phone for a key attestation: the phone's secure hardware and Android say which app is asking and which certificate signed it, and that the phone's bootloader is locked and its system verified. This server checks that against Google's attestation roots and Matty's own signing certificate, for each signed-in session. **Check, and show the result** tells each person and the admins what it found. **Check, and refuse a Matty that fails** also turns away a Matty that has not passed, everywhere but the lock screen; the web panel is never refused.\n**Its limits:** it proves the RSA certificate Matty is signed with, not the post-quantum one, because that is all Android attests. Nothing tells the web panel from a program that hides what it is, so refusing stops honest copies that were altered or rebuilt, not a determined impostor. And it holds only while the phone itself is intact: its secure hardware unbroken and its attestation key not leaked.\n**Kept:** for each session, whether it passed and why not, when, the app's version, the phone's security level and boot state, and what the app says of itself, for 30 days or until the session ends. What it checks against is built into this version (Google's list of revoked attestation keys as of 2026-11-16, GrapheneOS's keys as of 2026-04-20): nothing is fetched."
+                    },
+                    {
+                        "key": "AppCheckCertificates",
+                        "display_name": "More signing certificates",
+                        "type": "longtext",
+                        "default": "",
+                        "placeholder": "12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0",
+                        "help_text": "SHA-256 digests of signing certificates to accept besides Matty's own (E5:52:50:BE:…:27:3C), one per line, colons and case ignored: for people here who run a build of their own. Give the certificate Android attests, which is the first in the app's signing history. A line that is not a digest is left out, and the admins' list of results says so."
+                    },
+                    {
+                        "key": "AppCheckBootKeys",
+                        "display_name": "More verified-boot keys",
+                        "type": "longtext",
+                        "default": "",
+                        "placeholder": "12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0",
+                        "help_text": "Verified-boot key digests to accept for phones whose system is signed by a key their owner put in (a locked bootloader with a yellow boot screen), one per line, colons and case ignored. GrapheneOS's own keys are built in."
+                    },
+                    {
+                        "key": "AppCheckList",
+                        "display_name": "Results",
+                        "type": "custom",
+                        "help_text": "Whether this plugin is a signed release, then every Matty with a verdict that has not expired, newest first. Read from the server each time this page opens, or with Refresh."
+                    }
+                ]
+            },
+            {
+                "key": "push",
+                "title": "Push notifications",
+                "subtitle": "Notifications on phones through a UnifiedPush app, without Matty staying connected.",
+                "settings": [
+                    {
+                        "key": "EnablePush",
+                        "display_name": "Send push notifications to Matty",
+                        "type": "bool",
+                        "help_text": "Lets anyone signed in to this server register a push address for their Matty, and has this server send there whenever Mattermost decides to push to them, so that Matty shows notifications without staying connected. Each push is end-to-end encrypted: only the phone can read it.\n**Outside services:** an encrypted message of at most 4 KB goes to the push server each phone names through its UnifiedPush app (such as ntfy), which can be the person's own. Whoever runs that push server sees this server's internet address, the contact below, the User-Agent MattyPlugin, and when pushes are sent and how big they are, never what they say.\n**Needs:** Mattermost's own push notifications switched on, in System Console > Environment > Push Notification Server (Enable Push Notifications set to anything but \"Do not send push notifications\"), because only then does Mattermost decide to push. With them on, Mattermost itself also sends to the push notification server set there for anyone using the official Mattermost app; Matty's pushes do not depend on that server.\n**Kept:** for each signed-in session that registers, its push address, the phone's public push key and the secret that goes with it, and when it registered and was last seen, for as long as the session lasts or until the phone takes it back; and this server's own push key. Settings backups leave all of it out. Off by default.",
+                        "default": false
+                    },
+                    {
+                        "key": "PushAllowedHosts",
+                        "display_name": "Push servers on your own network",
+                        "type": "longtext",
+                        "placeholder": "ntfy.home.lan\n192.168.1.30:8080",
+                        "help_text": "Push servers this server may reach on your own network (at a private or local address), one host or host:port a line, with no https:// and no path. A push server that is not listed must be at a public internet address. A listed one may also be reached with plain http://. A line without a port means the usual one (443, or 80 for http://). A line that is not a host or host:port is left out, and the server log and the status below say which.",
+                        "default": ""
+                    },
+                    {
+                        "key": "PushOnlyListed",
+                        "display_name": "Only the push servers listed above",
+                        "type": "bool",
+                        "help_text": "Refuses a push address at any push server not on the list above, public ones included, so that pushes go only where you chose. Off by default.",
+                        "default": false
+                    },
+                    {
+                        "key": "PushContact",
+                        "display_name": "Contact for push servers",
+                        "type": "text",
+                        "placeholder": "mailto:admin@example.com",
+                        "help_text": "Optional: a mailto: or https: address given to push servers with every push, so that whoever runs one can reach you about this server's pushes. Every push server people choose sees it. Anything that is not a mailto: or https: address is left blank.",
+                        "default": ""
+                    },
+                    {
+                        "key": "PushStatus",
+                        "display_name": "Status",
+                        "type": "custom",
+                        "help_text": "Whether pushes can go out (the switch above and Mattermost's own), and how many people and phones get them, by push server: working, waiting for their first push, failing and refused. Never who uses which. Read from the server each time this page opens, or with Refresh."
+                    }
+                ]
+            },
+            {
+                "key": "panel",
+                "title": "Panel",
+                "subtitle": "How the panel opens, its banner, and what each live card shows.",
+                "settings": [
+                    {
+                        "key": "OpenPanel",
+                        "display_name": "Open the panel automatically",
+                        "type": "dropdown",
+                        "default": "never",
+                        "options": [
+                            {
+                                "display_name": "Never — people open it themselves",
+                                "value": "never"
+                            },
+                            {
+                                "display_name": "When somebody is live",
+                                "value": "live"
+                            },
+                            {
+                                "display_name": "Every time, live or not",
+                                "value": "always"
+                            }
+                        ],
+                        "help_text": "Decided once, when somebody loads Mattermost. Closed, it stays closed for that session; it never reopens underneath anybody. Somebody who has not unlocked Matty gets the lock screen, with nothing put in focus. **When somebody is live** is the one worth having."
+                    },
+                    {
+                        "key": "BannerText",
+                        "display_name": "Banner text",
+                        "type": "text",
+                        "help_text": "The words in the panel's banner, to match your Mattermost classification banner. Leave blank to hide the banner.",
+                        "placeholder": "Members only",
+                        "default": ""
+                    },
+                    {
+                        "key": "BannerColor",
+                        "display_name": "Banner colour",
+                        "type": "text",
+                        "help_text": "A hex colour such as `#1c58d9`. Blank uses the button colour of each person's Mattermost theme. The text turns black or white by the contrast rule Mattermost uses for its own classification banner.",
+                        "placeholder": "#1c58d9",
+                        "default": ""
+                    },
+                    {
+                        "key": "BannerPlacement",
+                        "display_name": "Banner placement",
+                        "type": "dropdown",
+                        "options": [
+                            {
+                                "display_name": "Top only",
+                                "value": "top"
+                            },
+                            {
+                                "display_name": "Top and bottom",
+                                "value": "both"
+                            }
+                        ],
+                        "help_text": "Set it as your Mattermost Classification Markings are; they offer the same two choices.",
+                        "default": "both"
+                    },
+                    {
+                        "key": "LivePreviews",
+                        "display_name": "Show live preview pictures",
+                        "type": "bool",
+                        "help_text": "Each live card shows a recent still of its stream. Browsers that are watching share a frame now and then; when nobody is watching, one open panel briefly tunes in to take one. Kept in memory only. Twitch streams' pictures come from Twitch and are relayed by this server; this switch covers them too. Off: the streamer's picture instead.",
+                        "default": true
+                    },
+                    {
+                        "key": "PreviewPictures",
+                        "display_name": "Preview pictures in use",
+                        "type": "custom",
+                        "help_text": "A preview is whatever the sharing person's browser sent. Remove takes one down until the next real frame replaces it. Block takes down everything that person shared and stops them sharing until you unblock them."
+                    },
+                    {
+                        "key": "ShowWatchers",
+                        "display_name": "Show who is watching",
+                        "type": "bool",
+                        "help_text": "Each live card shows the faces of the people watching it in the panel. The list of streams that carries them reaches every signed-in browser, locked ones included. Off: only how many. With it off, the Snoopers board and the watching achievements move once an hour, so nobody can tell who is watching right now, and nobody is counted toward biggest fans.",
+                        "default": true
+                    }
+                ]
+            },
+            {
+                "key": "streams",
+                "title": "Streams",
+                "subtitle": "Names, notes and pictures for the streams on Broadcast Box.",
+                "settings": [
+                    {
+                        "key": "AlwaysOnStreamKeys",
+                        "display_name": "24/7 stream keys",
+                        "type": "text",
+                        "help_text": "Comma separated: streams that run unattended around the clock. They are listed, tagged **24/7** and sorted last, but never change anyone's status, earn airtime on the boards or get recorded for Clips.",
+                        "placeholder": "radio",
+                        "default": ""
+                    },
+                    {
+                        "key": "ChannelPictures",
+                        "display_name": "24/7 pictures",
+                        "type": "custom",
+                        "help_text": "For each saved 24/7 stream key: a square picture, shown where a profile picture would be, and an optional wide picture for its Live now card. Choose any photo, then the part of it to use."
+                    },
+                    {
+                        "key": "StreamNameOverrides",
+                        "display_name": "Stream names",
+                        "type": "longtext",
+                        "help_text": "One per line, as `streamKey = Display Name`, for streams no Mattermost account owns, such as 24/7 channels.",
+                        "placeholder": "radio = Lo-fi radio",
+                        "default": ""
+                    },
+                    {
+                        "key": "StreamNotes",
+                        "display_name": "Stream notes",
+                        "type": "longtext",
+                        "help_text": "One per line, as `streamKey = note`. Used only when Broadcast Box holds no note for that stream, so a streamer who writes their own in the panel is never overruled.",
+                        "placeholder": "radio = Music around the clock.",
+                        "default": ""
+                    },
+                    {
+                        "key": "AutoLinkByUsername",
+                        "display_name": "Match stream keys to usernames",
+                        "type": "bool",
+                        "help_text": "A stream key that equals a Mattermost username is credited to that person with no setup. Usernames are self-service, so this is weaker than a token-verified link; leave it off if streamers unlock Matty with their bearer token. A match never unlocks the panel; only a bearer token or the **Access** list does.",
+                        "default": false
+                    }
+                ]
+            },
+            {
+                "key": "branding",
+                "title": "Name and artwork",
+                "subtitle": "What this is called on your server, and its pictures.",
+                "settings": [
+                    {
+                        "key": "Name",
+                        "display_name": "Name",
+                        "type": "text",
+                        "help_text": "What people here see this called: the panel's title, the App Bar button, and sentences such as **Matty is locked**. Leave it blank for Matty. The System Console goes on listing the plugin as Matty.",
+                        "placeholder": "Matty",
+                        "default": "Matty"
+                    },
+                    {
+                        "key": "Artwork",
+                        "display_name": "Emblem, icon and ghost",
+                        "type": "custom",
+                        "help_text": "SVG, PNG, JPEG, GIF or WebP, up to 512 KB. A picture added or removed shows for everybody at once; one that replaces another shows on their next page load. The icon is also the channel-header button wherever there is no App Bar. The App Marketplace icon comes from the installed bundle; only a new bundle changes it."
+                    },
+                    {
+                        "key": "NoSignalGhost",
+                        "display_name": "No Signal ghost",
+                        "type": "dropdown",
+                        "help_text": "How often the No Signal screen catches the ghost picture for half a second, as if the set had found a channel.",
+                        "default": "occasional",
+                        "options": [
+                            {
+                                "display_name": "Never",
+                                "value": "off"
+                            },
+                            {
+                                "display_name": "Rarely — about once a minute",
+                                "value": "rare"
+                            },
+                            {
+                                "display_name": "Occasionally — every 20 seconds or so",
+                                "value": "occasional"
+                            },
+                            {
+                                "display_name": "Often — every few seconds",
+                                "value": "often"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "key": "badge",
+                "title": "Live badge",
+                "subtitle": "A streamer's custom status while they are live, handed back when they stop.",
+                "settings": [
+                    {
+                        "key": "EnableLiveBadge",
+                        "display_name": "Show a live badge",
+                        "type": "bool",
+                        "help_text": "Streamers who have linked their stream, or connected their Twitch account while **Show people live on Twitch** is on, get a custom status while live, so a red dot shows by their name across Mattermost. The status they had before is restored when they stop.",
+                        "default": true
+                    },
+                    {
+                        "key": "LiveEmoji",
+                        "display_name": "Badge emoji",
+                        "type": "text",
+                        "help_text": "An emoji name, with or without colons; custom emoji work too. Mattermost does not check it, so a typo shows a blank badge rather than an error. Built in: `red_circle`, `red_square`, `tv`, `satellite`.",
+                        "placeholder": "red_circle",
+                        "default": "red_circle"
+                    },
+                    {
+                        "key": "LiveStatusText",
+                        "display_name": "Badge text",
+                        "type": "text",
+                        "help_text": "The custom status text while somebody is live.",
+                        "placeholder": "Live now",
+                        "default": "Live now"
+                    }
+                ]
+            },
+            {
+                "key": "airtime",
+                "title": "Airtime and awards",
+                "subtitle": "Hours streamed and watched, the boards, medals, biggest fans and achievements.",
+                "settings": [
+                    {
+                        "key": "EnableLeaderboard",
+                        "display_name": "Track streamed hours and award medals",
+                        "type": "bool",
+                        "help_text": "Counts how long each person streams and shows a top three for the month and for all time, with 🥇🥈🥉 by their names. Months run on UTC. While **Show people live on Twitch** is on, time live on Twitch by people who connected it counts too, added to their Broadcast Box time, and a minute spent live on both counts once. Off stops counting and keeps what is counted. See README › Airtime and medals.",
+                        "default": true
+                    },
+                    {
+                        "key": "TopWatchers",
+                        "display_name": "Rank the Top Snoopers",
+                        "type": "bool",
+                        "help_text": "Ranks people by time spent watching other people's streams, on the Trophies card's Snoopers tab. Only people with a linked stream are counted, and only while linked: nobody else's watching is recorded. 24/7 channels and the panel's hidden preview look-ins never count, and nor does watching a Twitch stream: Matty cannot see it. With **Show who is watching** off, its figures move only hourly, so they never show who is watching now. Off: nothing is recorded, the tab hides, counted hours stay. With **Name each streamer's biggest fan** on, it also keeps how long each person has watched each streamer, counted only while **Show who is watching** is on. See README › Top Snoopers.",
+                        "default": true
+                    },
+                    {
+                        "key": "EnableAchievements",
+                        "display_name": "Give achievements",
+                        "type": "bool",
+                        "help_text": "Badges for milestones: hours streamed, hours spent watching other people's streams, months on the podium, thumbs up on clips, and hours on the 24/7 channels below. Worked out from the hours Matty already keeps, so hours from before 3.2.0 count. They show in profiles and on the Trophies card, and beside a name only when its owner chooses them.",
+                        "default": true
+                    },
+                    {
+                        "key": "ChannelAchievements",
+                        "display_name": "24/7 channel achievements",
+                        "type": "longtext",
+                        "help_text": "One per line: a 24/7 stream key from **24/7 stream keys**, the name the achievement shows, and the hours for each step, for example `radio = Lo-fi radio = 1, 10, 50, 100, 250`. Up to 8 lines and 8 steps. Hours on these channels are counted from 3.2.0 on, only for people who have linked their stream, only while they watch in the panel, and only while **Rank the Top Snoopers** is on. There is no daily cap, so a tile left open counts. The keys stay on the server.",
+                        "placeholder": "radio = Lo-fi radio = 1, 10, 50, 100, 250",
+                        "default": ""
+                    },
+                    {
+                        "key": "EnableBiggestFans",
+                        "display_name": "Name each streamer's biggest fan",
+                        "type": "bool",
+                        "help_text": "Shows who has watched each linked streamer most in the panel, all time, once it is at least an hour. Needs **Rank the Top Snoopers** and counts the same people, and counts only while **Show who is watching** is on, when the cards already show who is watching whom; with it off, nothing is counted and the figures stand still. This keeps how long each person has watched each streamer, which the Snoopers board alone does not. Nobody can opt out on their own; switching this off stops it for everybody and keeps what was counted.",
+                        "default": true
+                    },
+                    {
+                        "key": "AirtimeTools",
+                        "display_name": "Recorded airtime",
+                        "type": "custom",
+                        "help_text": "Airtime is the one thing here that cannot be rebuilt from anywhere else. Export it before anything risky: an upgrade, a database move, a new plugin ID. Restore and Import merge, keeping the larger figure for each streamer, so they cannot cost anybody hours and running one twice does nothing."
+                    }
+                ]
+            },
+            {
+                "key": "clips",
+                "title": "Clips",
+                "subtitle": "Keep the last few minutes of a stream, trim it and share it.",
+                "settings": [
+                    {
+                        "key": "EnableClips",
+                        "display_name": "Let people clip streams",
+                        "type": "bool",
+                        "help_text": "A ✂ on every playing stream keeps its last few minutes as a draft to trim, publish and share. Making, upvoting and sharing clips is for people who have linked their stream with their bearer token; people let in under **Access** can watch them.\n**Recorded:** a rolling recording of every live stream, linked or not (never 24/7 channels), on this server's disk, through one extra playback session per stream to Broadcast Box over UDP. Broadcast Box's own pages count it as a viewer; Matty's do not.\n**In memory only:** which signed-in person has a playback session on which stream, to check who may clip. Never shown; forgotten 15 minutes after the session ends.\nStreamers who have linked their stream can switch clipping of it off and wipe what is held. Off stops recording at once; published clips stay until they expire.",
+                        "default": true
+                    },
+                    {
+                        "key": "ClipLengthSeconds",
+                        "display_name": "Clip length",
+                        "type": "dropdown",
+                        "default": "120",
+                        "options": [
+                            {
+                                "display_name": "30 seconds",
+                                "value": "30"
+                            },
+                            {
+                                "display_name": "1 minute",
+                                "value": "60"
+                            },
+                            {
+                                "display_name": "1 minute 30",
+                                "value": "90"
+                            },
+                            {
+                                "display_name": "2 minutes",
+                                "value": "120"
+                            },
+                            {
+                                "display_name": "3 minutes",
+                                "value": "180"
+                            },
+                            {
+                                "display_name": "4 minutes",
+                                "value": "240"
+                            },
+                            {
+                                "display_name": "5 minutes",
+                                "value": "300"
+                            }
+                        ],
+                        "help_text": "How much one press keeps; people can trim shorter, never longer. Each live stream's last this-much is held on disk, about 45 MB a minute at 6 Mbit/s."
+                    },
+                    {
+                        "key": "ClipRetentionDays",
+                        "display_name": "Keep clips for (days)",
+                        "type": "number",
+                        "help_text": "1 to 365. Published clips are deleted this long after publishing; their upvotes keep counting toward Best Clipper. Clips that lowering it makes too old are removed only after 24 hours, so a mistake can be put right.",
+                        "default": 30
+                    },
+                    {
+                        "key": "ClipStorageLimitGB",
+                        "display_name": "Space for clips (GB)",
+                        "type": "number",
+                        "help_text": "The most disk published clips and drafts may use, and one person at most a fifth of it (at least 1 GB). Publishing is refused past either; nothing is deleted to make room. Rolling recordings are capped separately, at 4 GB.",
+                        "default": 20
+                    },
+                    {
+                        "key": "AllowClipDownloads",
+                        "display_name": "Let people download clips",
+                        "type": "bool",
+                        "help_text": "Adds **Download** to a clip, for people who have linked their stream with their bearer token. People let in under **Access** can watch clips but not download them, and a streamer can turn off downloads of clips of their own stream. Off: nobody can download a clip from Matty. Every download is logged with who took which clip.",
+                        "default": false
+                    },
+                    {
+                        "key": "ClipsAdmin",
+                        "display_name": "Clips on the server",
+                        "type": "custom",
+                        "help_text": "Watch plays a clip in its row; there is no download button. The list looks again every 20 seconds."
+                    }
+                ]
+            },
+            {
+                "key": "birthdays",
+                "title": "Birthdays",
+                "subtitle": "A greeting on the morning of each birthday, from a list only system admins can see.",
+                "settings": [
+                    {
+                        "key": "EnableBirthdays",
+                        "display_name": "Post birthday greetings",
+                        "type": "bool",
+                        "default": false,
+                        "help_text": "Posts on the morning of each birthday on the list, exactly once, even with several Mattermost servers."
+                    },
+                    {
+                        "key": "Birthdays",
+                        "display_name": "Birthday list",
+                        "type": "custom",
+                        "help_text": "Somebody with a Mattermost account needs their username. Somebody without one, a child say, needs a parent instead, and the greeting is addressed to the parents. Saved with the page, as JSON in the shape of a birthdays.json file.",
+                        "default": ""
+                    },
+                    {
+                        "key": "BirthdayChannel",
+                        "display_name": "Channel",
+                        "type": "text",
+                        "help_text": "As `team/channel`, using the names in the URL.",
+                        "placeholder": "myteam/town-square",
+                        "default": ""
+                    },
+                    {
+                        "key": "BirthdayZone",
+                        "display_name": "Time zone",
+                        "type": "text",
+                        "help_text": "An IANA name such as `Europe/London`. Leave blank for the server's own time zone, which is what a cron job would have used.",
+                        "placeholder": "Europe/London",
+                        "default": ""
+                    },
+                    {
+                        "key": "BirthdayHour",
+                        "display_name": "Hour to post (0 to 23)",
+                        "type": "number",
+                        "help_text": "In the birthday time zone. Greetings go out at the first check after this hour.",
+                        "default": 9
+                    },
+                    {
+                        "key": "BirthdayBadge",
+                        "display_name": "Put a cake by their name",
+                        "type": "bool",
+                        "help_text": "A 🎂 custom status for the whole birthday, in the birthday time zone. Works like the live badge and wins over it. Only people with a username in the list can have one.",
+                        "default": true
+                    },
+                    {
+                        "key": "BirthdayMessage",
+                        "display_name": "Greeting",
+                        "type": "longtext",
+                        "help_text": "For somebody with an account. `{full_name}`, `{first_name}`, `{username}` and `{age}` are filled in. Markdown and @mentions work.",
+                        "default": "# 🎂 Happy birthday, {full_name}! 🎉\n@{username} turns **{age}** today."
+                    },
+                    {
+                        "key": "BirthdayKidMessage",
+                        "display_name": "Greeting for somebody with no account",
+                        "type": "longtext",
+                        "help_text": "For an entry with parents rather than a username. `{full_name}`, `{first_name}`, `{parents}` and `{age}` are filled in; `{parents}` becomes the @mentions.",
+                        "default": "# 🎂 Happy birthday, {full_name}! 🎉\n{parents}'s kid turns **{age}** today."
+                    }
+                ]
+            },
+            {
+                "key": "theme",
+                "title": "Theme",
+                "subtitle": "Put people on a Mattermost theme of your choosing, with code blocks to match.",
+                "settings": [
+                    {
+                        "key": "EnableTheme",
+                        "display_name": "Give people your theme",
+                        "type": "bool",
+                        "default": false,
+                        "help_text": "New accounts get it as they are created. Everybody who already has an account is left alone until you press **Apply to everyone now**."
+                    },
+                    {
+                        "key": "ThemeApply",
+                        "display_name": "Keep people on it",
+                        "type": "dropdown",
+                        "default": "new",
+                        "options": [
+                            {
+                                "display_name": "Leave people alone — they can change it",
+                                "value": "new"
+                            },
+                            {
+                                "display_name": "Put them back on it every time they log in",
+                                "value": "login"
+                            }
+                        ],
+                        "help_text": "The second choice takes the choice away: somebody who picks another theme keeps it until their next login, then loses it."
+                    },
+                    {
+                        "key": "Theme",
+                        "display_name": "Theme colours",
+                        "type": "longtext",
+                        "default": "",
+                        "help_text": "Copy a theme from **Settings › Display › Theme › Copy to clipboard** and paste it here. Mattermost silently turns any value that is not a hex colour **white** when it saves a theme; **Apply to everyone** names any first."
+                    },
+                    {
+                        "key": "ThemeTools",
+                        "display_name": "Apply to everyone",
+                        "type": "custom"
+                    },
+                    {
+                        "key": "StyleCodeBlocks",
+                        "display_name": "Black code blocks",
+                        "type": "bool",
+                        "help_text": "Puts code blocks on black, with a thin border; Mattermost's darkest code theme is grey. The only styling Matty adds outside its panel, and removed when the plugin is disabled.",
+                        "default": false
+                    }
+                ]
+            },
+            {
+                "key": "media",
+                "title": "Movies and games",
+                "subtitle": "Real titles, cover art and a short profile for planned streams. Off by default.",
+                "settings": [
+                    {
+                        "key": "MediaLookup",
+                        "display_name": "Look up movies, shows and games",
+                        "type": "bool",
+                        "help_text": "Lets the planning form find real titles, with cover art and a short profile.\n**Outside services:** the Mattermost server contacts TMDB (api.themoviedb.org, image.tmdb.org) for movies and shows, the Steam store (store.steampowered.com and its steamstatic.com image servers) for games and, with a Twitch application, IGDB (api.igdb.com, images.igdb.com, signed in through id.twitch.tv). Only when somebody searches while planning or saves a plan with a title, and to fetch those titles' pictures. Browsers never contact them for this (Show people live on Twitch, Show people's Steam status, Show people's Hytale names and the UnifiedPush push notifications are separate): the art is relayed.\n**Kept:** titles, descriptions and picture addresses in the Mattermost database for days or weeks; the pictures as **Remembered titles** describes.\nOff: no outside requests for lookups; beyond Broadcast Box and Mumble, Matty then contacts only Twitch, Steam, Hytale and the UnifiedPush push servers people's phones name, each only if its own switch (**Show people live on Twitch**, **Show people's Steam status**, **Show people's Hytale names**, **Send push notifications to Matty**) is on.",
+                        "default": false
+                    },
+                    {
+                        "key": "TMDBToken",
+                        "display_name": "TMDB read access token",
+                        "type": "text",
+                        "secret": true,
+                        "help_text": "Needed for movies and shows; games work without it. Free: at themoviedb.org open **Settings › API** and copy the **API Read Access Token** (an older 32-character API key works too). Kept as plain text in Mattermost's configuration, and masked on this page. Matty never sends it to a browser; settings backups leave it out unless you include passwords.",
+                        "default": ""
+                    },
+                    {
+                        "key": "MediaCache",
+                        "display_name": "Remembered titles",
+                        "type": "custom",
+                        "help_text": "A cache, so nothing is looked up twice for days; forgetting only means asking again. Pictures are kept on this server's disk (ceo.villa.matty/media in the file storage directory, at most 256 MB) when the File Storage System is Local file system, otherwise in memory only. Forget clears both. Titles stay in the database if the plugin is removed, so forget them first when removing it for good (sixteen empty entries remain); other servers in a cluster drop theirs within six hours."
+                    }
+                ]
+            },
+            {
+                "key": "twitch",
+                "title": "Twitch",
+                "subtitle": "One Twitch developer application for everything Matty does with Twitch: looking up games in IGDB, Twitch's game database, and showing the people who connect their Twitch account while they are live there.",
+                "settings": [
+                    {
+                        "key": "TwitchClientID",
+                        "display_name": "Client ID",
+                        "type": "text",
+                        "help_text": "From a free Twitch developer application: at dev.twitch.tv/console, with two-factor authentication on, register one with Client Type **Confidential** and, as its OAuth Redirect URL, the exact address shown below under **Twitch connections** (Show people live on Twitch needs it; IGDB does not, and `http://localhost` will do for it alone), then copy its Client ID here (more in README › The Twitch application). With both filled in and **Look up movies, shows and games** on, the Mattermost server also contacts id.twitch.tv for a token and IGDB (api.igdb.com, images.igdb.com), only when somebody searches for a game, saves a plan with an IGDB game, or a panel shows its art, and for **Show people live on Twitch** below. Game lookups never make a browser contact Twitch or IGDB; the two Twitch live switches below do, as their help explains. Empty: games come from Steam alone, and nobody can connect Twitch.",
+                        "default": ""
+                    },
+                    {
+                        "key": "TwitchClientSecret",
+                        "display_name": "Client Secret",
+                        "type": "text",
+                        "secret": true,
+                        "help_text": "Press **New Secret** in the same application and paste it here; pressing it again stops the old one working. Never logged, and the token Twitch issues for it is kept in memory only. Kept as plain text in Mattermost's configuration, and masked on this page. Matty never sends it to a browser; settings backups leave it out unless you include passwords.",
+                        "default": ""
+                    },
+                    {
+                        "key": "EnableTwitchLive",
+                        "display_name": "Show people live on Twitch",
+                        "type": "bool",
+                        "help_text": "Lets people connect their Twitch account with a Connect Twitch button in the panel. While one of them is live on Twitch they wear the live badge, get a card in Live now that EVERY member sees, with their Twitch title, category, viewer count and preview picture, and their time live on Twitch counts toward the airtime boards and medals alongside their Broadcast Box time (never twice for the same minute). Anybody who has linked their stream can connect; under Twitch connections below you can disconnect and block a person, or mark a channel 24/7 so it gets no badge and no airtime. Twitch no longer marks mature streams, so Matty cannot hide them. This makes the Mattermost SERVER contact Twitch: id.twitch.tv (for the application's access token, and, once per connection, to exchange and then revoke that person's one-time sign-in) and api.twitch.tv (once per connection to confirm who connected; once a minute, only while somebody is connected, to see who is live; once a day to keep their names right). It fetches Twitch's preview pictures from static-cdn.jtvnw.net and relays them, so browsers never fetch them. It also makes ONE BROWSER contact Twitch: pressing Connect Twitch and then Continue on Twitch sends that person's own browser, in the window it opens, to id.twitch.tv and Twitch's sign-in pages to approve it. Matty keeps each connected person's Twitch user id, login, display name and how long they streamed on Twitch. It never keeps a Twitch password or token, and disconnecting deletes all of it. Needs the Client ID and Client Secret above, and the OAuth Redirect URL shown below added to that application once. Off by default. While it is off, nothing is asked of Twitch, nobody can connect and no Twitch card shows; people already connected can still disconnect.",
+                        "default": false
+                    },
+                    {
+                        "key": "TwitchEmbed",
+                        "display_name": "Play Twitch streams inside Matty",
+                        "type": "bool",
+                        "help_text": "Plays Twitch streams in the panel with Twitch's own embedded player instead of only linking to them. THIS CHANGES MATTY'S PROMISE that browsers contact nobody but this Mattermost server. Somebody who presses play on a Twitch stream has their browser load Twitch's player straight from Twitch (player.twitch.tv). That player then talks to Twitch's own servers (its code names, for example, assets.twitch.tv, gql.twitch.tv, static-cdn.jtvnw.net, usher.ttvnw.net, passport.twitch.tv, id.twitch.tv, edge.ads.twitch.tv and Twitch's analytics at spade.twitch.tv) and to the advertising and audience-measurement services Twitch works with (Amazon's amazon-adsystem.com, comScore's scorecardresearch.com and Nielsen's imrworldwide.com). Twitch sees this server's address and the viewer's IP address and, if the viewer is signed in to Twitch in that browser, who they are (in the desktop app, connecting Twitch signs Twitch in there). Twitch may show ads in it. The player can play sound, go fullscreen, show browser dialogs and open windows of its own, which in the desktop app includes the app's built-in window for plugin pages; it cannot change or read the Mattermost page. Matty cannot list or limit what the player contacts. Nothing loads until somebody presses play on a Twitch stream, and Broadcast Box streams are not affected. Twitch only allows its player on a site served over https on the standard port (443) under a domain name, and at least 400 by 300 pixels, which in the side panel needs a window at least 1201 pixels wide; otherwise the stream plays in a larger window over the page. Off: Twitch streams show as cards with a Watch on Twitch link, which opens twitch.tv in a new tab. Needs Show people live on Twitch.",
+                        "default": false
+                    },
+                    {
+                        "key": "TwitchSetup",
+                        "display_name": "Twitch connections",
+                        "type": "custom",
+                        "help_text": "The exact OAuth Redirect URL to add to the Twitch application, whether Twitch's player can run at this server's address, who has connected (with Disconnect, Disconnect and block, and 24/7 for each), who is blocked, and a way to delete everything Matty holds from Twitch. Works while Show people live on Twitch is off, so connections can always be removed."
+                    }
+                ]
+            },
+            {
+                "key": "steam",
+                "title": "Steam",
+                "subtitle": "Lets people show their Steam status here: they connect a Steam account, and everyone who can open the panel sees whether they are online and what they are playing. Off by default.",
+                "settings": [
+                    {
+                        "key": "EnableSteam",
+                        "display_name": "Show people's Steam status",
+                        "type": "bool",
+                        "help_text": "Lets people who have unlocked Matty connect their Steam account with Connect Steam in the panel, and shows everyone who can open the panel (people who unlocked it and people let in to watch, never anybody locked) each connected person's Steam name, whether Steam says they are online, busy or away, and the game they are playing. Steam shows the game only while that person's Steam profile and its game details are public; a private profile shows as offline. This makes the Mattermost SERVER contact Steam: steamcommunity.com once per connection, to confirm the sign-in Steam sent back, and api.steampowered.com once per connection and then once a minute while anybody is connected, one call for everybody (at most 100 people can connect), with the Web API key below. It also makes ONE BROWSER contact Steam: pressing Connect Steam and then Continue on Steam sends that person's own browser, in the window it opens, to Steam's sign-in page at steamcommunity.com, which loads from other servers, for example Steam's own and Google's reCAPTCHA; these are examples from the page's own policy, not a complete list. Matty keeps each connected person's Steam ID and Steam name, never a Steam password; their status and game are held in memory for a few minutes at most; disconnecting deletes the rest. Matty is not made, endorsed or supported by Valve or Steam. Steam needs no redirect address registered. Needs the Web API key below. Off by default. While it is off, nothing is asked of Steam, nobody can connect and nothing about Steam shows; people already connected can still disconnect.",
+                        "default": false
+                    },
+                    {
+                        "key": "SteamWebAPIKey",
+                        "display_name": "Steam Web API key",
+                        "type": "text",
+                        "secret": true,
+                        "help_text": "From steamcommunity.com/dev/apikey, signed in to the Steam account that will own it: enter this server's domain name (the host in Mattermost's Site URL) and accept Steam's Web API Terms of Use. Steam gives keys only to accounts that have spent at least 5 US dollars and use the Steam Guard Mobile Authenticator. Steam's terms say to keep it confidential, and Matty does: it sends it only to api.steampowered.com, in a request header rather than an address, never logs it and never sends it to a browser. Kept as plain text in Mattermost's configuration, and masked on this page; settings backups leave it out unless you include passwords."
+                    },
+                    {
+                        "key": "SteamSetup",
+                        "display_name": "Steam connections",
+                        "type": "custom",
+                        "help_text": "The address Steam sends people back to, whether the key works, the last check, who has connected (with Disconnect, and Disconnect and block), who is blocked, and a way to delete everything Matty holds from Steam. Works while Show people's Steam status is off, so connections can always be removed."
+                    }
+                ]
+            },
+            {
+                "key": "hytale",
+                "title": "Hytale",
+                "subtitle": "Lets people show their Hytale username here, so friends can find each other in-game. Hytale gives other apps a person's identity only: not whether they are playing, nor where. Off by default.",
+                "settings": [
+                    {
+                        "key": "EnableHytale",
+                        "display_name": "Show people's Hytale names",
+                        "type": "bool",
+                        "help_text": "Lets people who have unlocked Matty connect their Hytale account with Connect Hytale in the panel, and shows everyone who can open the panel (people who unlocked it and people let in to watch, never anybody locked) the Hytale username each person picked, with a Copy button, so friends can find each other in-game. Hytale tells other apps who somebody is and nothing else: not whether they are playing, nor on which server. This makes the Mattermost SERVER contact Hytale at connect.accounts.hytale.com once per connection, to exchange that person's one-time sign-in, read the username and revoke the token. It also makes ONE BROWSER contact Hytale: pressing Connect Hytale and then Continue on Hytale sends that person's own browser, in the window it opens, to Hytale's sign-in pages (for example accounts.hytale.com, connect.accounts.hytale.com and backend.accounts.hytale.com), which load Cloudflare's Turnstile check (challenges.cloudflare.com) and, if the person accepts Hytale's cookies, Cloudflare's analytics, and report to Hytale's error tracker (sentry.hytale.com). Hytale's page may also offer signing in with Google, Microsoft, Discord, Twitch or Epic Games, and a person who picks one reaches that service too. These are examples from the page's own policy, not a complete list. Matty keeps each connected person's Hytale username and its profile id, never a Hytale password or token; disconnecting deletes them. A changed Hytale username shows the old one until that person connects again. Needs the Client ID and Client Secret below, and the Redirect URI shown below registered with Hytale. Off by default. While it is off, nothing is asked of Hytale, nobody can connect and no Hytale names show; people already connected can still disconnect.",
+                        "default": false
+                    },
+                    {
+                        "key": "HytaleClientID",
+                        "display_name": "Client ID",
+                        "type": "text",
+                        "help_text": "From a Hytale third-party application: at accounts.hytale.com, under Third-party developer apps, apply for a confidential client with the scopes openid and hytale:profile and, as its Redirect URI, the exact address shown below under Hytale connections. Hytale's staff review each application. Copy its Client ID here."
+                    },
+                    {
+                        "key": "HytaleClientSecret",
+                        "display_name": "Client Secret",
+                        "type": "text",
+                        "secret": true,
+                        "help_text": "The same application's Client Secret. Matty sends it only to connect.accounts.hytale.com, as the application's sign-in to Hytale (HTTP Basic), never logs it and never sends it to a browser. Kept as plain text in Mattermost's configuration, and masked on this page; settings backups leave it out unless you include passwords."
+                    },
+                    {
+                        "key": "HytaleSetup",
+                        "display_name": "Hytale connections",
+                        "type": "custom",
+                        "help_text": "The exact Redirect URI to register with Hytale, whether the application is set up, who has connected (with Disconnect, and Disconnect and block), who is blocked, and a way to delete everything Matty holds from Hytale. Works while Show people's Hytale names is off, so connections can always be removed."
+                    }
+                ]
+            },
+            {
+                "key": "voice",
+                "title": "Mumble",
+                "subtitle": "Who is in voice, over one connection. Matty never joins a channel, and hears nobody.",
+                "settings": [
+                    {
+                        "key": "EnableVoice",
+                        "display_name": "Show who is in voice",
+                        "type": "bool",
+                        "help_text": "Shows who is in Mumble as one row at the top of the panel, gone while voice is empty. Besides Broadcast Box, this, the title lookups, **Show people live on Twitch**, **Show people's Steam status**, **Show people's Hytale names** and **Send push notifications to Matty** (the UnifiedPush push servers people's phones name) are the only outside connections Matty makes.",
+                        "default": false
+                    },
+                    {
+                        "key": "MumbleServer",
+                        "display_name": "Mumble server",
+                        "type": "text",
+                        "help_text": "`host` or `host:port`; the port defaults to 64738. A Mumble client is sent every connected user, which is all this needs.",
+                        "placeholder": "192.168.1.20:64738",
+                        "default": ""
+                    },
+                    {
+                        "key": "MumbleUsername",
+                        "display_name": "Connect as",
+                        "type": "text",
+                        "help_text": "Matty's name in Mumble. It leaves itself out of the roster under this name, so changing it needs nothing else.",
+                        "placeholder": "Matty",
+                        "default": "Matty"
+                    },
+                    {
+                        "key": "MumblePassword",
+                        "display_name": "Server password",
+                        "type": "text",
+                        "help_text": "Only if the Mumble server asks for one. Kept as plain text in Mattermost's configuration, and masked on this page. Matty never sends it to a browser; settings backups leave it out unless you include passwords.",
+                        "default": "",
+                        "secret": true
+                    },
+                    {
+                        "key": "VoiceHiddenNames",
+                        "display_name": "Names to leave out",
+                        "type": "text",
+                        "help_text": "Comma separated. Bots and bridges, such as Matterbridge's \"Mattermost\", which would otherwise keep the row up when voice is empty. Matty leaves itself out on its own.",
+                        "placeholder": "Mattermost",
+                        "default": "Mattermost"
+                    },
+                    {
+                        "key": "VoiceMatchUsernames",
+                        "display_name": "Match names to usernames",
+                        "type": "bool",
+                        "help_text": "A Mumble name that equals a Mattermost username marks your own row and puts headphones by that person's name while they are on Mumble. It lets nobody act as anybody else in Mattermost, but it is only a name: if anybody can connect as \"alice\", they show headphones on Alice. Off: only **Names that differ** count. Only Mumble names made of plain letters, digits, dots, dashes and underscores match, so a lookalike name with an accented or foreign letter matches nobody. The soundboard uses the same match.",
+                        "default": true
+                    },
+                    {
+                        "key": "VoiceNameMap",
+                        "display_name": "Names that differ",
+                        "type": "longtext",
+                        "help_text": "One per line, as `mumbleName = mattermostUsername`, for people whose two names are not the same.",
+                        "placeholder": "alice_ = alice",
+                        "default": ""
+                    }
+                ]
+            },
+            {
+                "key": "soundboard",
+                "title": "Soundboard",
+                "subtitle": "Short sounds that people in Mumble play into their channel from the panel.",
+                "settings": [
+                    {
+                        "key": "EnableSoundboard",
+                        "display_name": "Let people play sounds into Mumble",
+                        "type": "bool",
+                        "help_text": "People who have linked their stream and are in Mumble get a soundboard in the panel, opened from a speaker in the panel's footer bar: tiles, each an emoji over a short name, that play a short sound into the Mumble channel they are in. Matty's Mumble account then sends audio. It must not log in as SuperUser; it needs **Speak** in the channel it sits in and **Whisper** in your voice channels (Mumble gives both unless an ACL takes them away); and the server's bandwidth limit must allow 64 kbit/s. Needs **Show who is in voice**.",
+                        "default": false
+                    },
+                    {
+                        "key": "SoundCooldownSeconds",
+                        "display_name": "Wait between sounds (seconds)",
+                        "type": "number",
+                        "help_text": "How long somebody waits after their sound ends before they can play another. 3 to 120. Only one sound plays at a time, and at most 8 a minute in all, whatever this says.",
+                        "default": 10
+                    },
+                    {
+                        "key": "SoundsRegisteredOnly",
+                        "display_name": "Only registered Mumble users",
+                        "type": "bool",
+                        "help_text": "Mumble names are matched to accounts as for the headphones: by **Names that differ**, or by the same username, plain letters, digits, dots, dashes and underscores only. Anybody who can connect to your Mumble server can take a name nobody is using, and by default Mumble also lets anybody register a name nobody has registered yet. Tick this to offer the soundboard only to Mumble names that are registered. It helps once your people have registered their own names (or you have taken \"SelfRegister\" away from @all in Mumble's root channel), because a registered name can't be used without its certificate or password.",
+                        "default": false
+                    },
+                    {
+                        "key": "SoundsAdmin",
+                        "display_name": "Sounds on the server",
+                        "type": "custom",
+                        "help_text": "Every sound on the board, with Listen and Delete; who is blocked from the soundboard; and whether Matty's Mumble account can play."
+                    }
+                ]
+            },
+            {
+                "key": "bridge",
+                "title": "Mumble chat bridge",
+                "subtitle": "Mumble text chat in a Mattermost channel, both ways, over the same connection.",
+                "settings": [
+                    {
+                        "key": "EnableChatBridge",
+                        "display_name": "Bridge Mumble chat",
+                        "type": "bool",
+                        "help_text": "Relays text chat both ways. Switch the Mumble side of any other bridge off first, or every message appears twice. Messages carry the sender's name in the text, because a plugin cannot post as somebody else.",
+                        "default": false
+                    },
+                    {
+                        "key": "BridgeChannel",
+                        "display_name": "Channel",
+                        "type": "text",
+                        "help_text": "As `team/channel`, using the names in the URL. Posts by bots, webhooks and plugins never go to Mumble; a bridge on an ordinary account has to be named in **Accounts to ignore**.",
+                        "placeholder": "myteam/town-square",
+                        "default": ""
+                    },
+                    {
+                        "key": "BridgeIgnore",
+                        "display_name": "Accounts to ignore",
+                        "type": "text",
+                        "help_text": "Comma separated. **Name any other bridge's account here while both run**: its posts look like a person's, and relaying them back to Mumble loops forever. Matty pauses for a minute past thirty messages in one, but that is only a backstop. See README › Mumble chat.",
+                        "placeholder": "matterbridge",
+                        "default": ""
+                    }
+                ]
+            },
+            {
+                "key": "bot",
+                "title": "Bot account",
+                "subtitle": "The account Matty posts relayed chat and birthday greetings as.",
+                "settings": [
+                    {
+                        "key": "BotUsername",
+                        "display_name": "Username",
+                        "type": "text",
+                        "help_text": "Lower-case letters, numbers, dots, dashes and underscores. Changing it renames the account rather than making another; if the name is taken, the old one stays and **Picture** says why.",
+                        "placeholder": "matty-bot",
+                        "default": "matty-bot"
+                    },
+                    {
+                        "key": "BotDisplayName",
+                        "display_name": "Display name",
+                        "type": "text",
+                        "help_text": "Shown above its posts.",
+                        "placeholder": "Matty",
+                        "default": "Matty"
+                    },
+                    {
+                        "key": "BotDescription",
+                        "display_name": "Description",
+                        "type": "longtext",
+                        "help_text": "Shown on its profile, under its name. Leave blank for none.",
+                        "placeholder": "Relays chat between Mumble and Mattermost, and posts birthdays.",
+                        "default": "Relays chat between Mumble and Mattermost, and posts birthdays."
+                    },
+                    {
+                        "key": "BotAvatar",
+                        "display_name": "Picture",
+                        "type": "custom",
+                        "help_text": "Any PNG, JPEG, GIF or WebP; choose the part of it to use. It shows on everything the bot posts."
+                    }
+                ]
+            },
+            {
+                "key": "backup",
+                "title": "Backup",
+                "subtitle": "Every setting on this page, to a file and back.",
+                "settings": [
+                    {
+                        "key": "SettingsBackup",
+                        "display_name": "Settings file",
+                        "type": "custom",
+                        "help_text": "Restoring changes only what the file names and leaves everything else exactly as it is. Not in the file: recorded airtime (Export it under Airtime), the bot's picture, the artwork, the 24/7 pictures, who is blocked from sharing previews, remembered titles, who linked which stream key, who is let in under Access, who has connected which Twitch account and their Twitch hours, who has connected which Steam or Hytale account, and anything about Clips: the clips, upvotes, Best Clipper, who is blocked from clipping and which streams are switched off for it."
+                    }
+                ]
+            },
+            {
+                "key": "support",
+                "title": "Troubleshooting",
+                "subtitle": "Off unless somebody is looking into a problem.",
+                "settings": [
+                    {
+                        "key": "DebugLogSDP",
+                        "display_name": "Log WHEP negotiation",
+                        "type": "bool",
+                        "help_text": "Logs each playback attempt's offer, answer and ICE candidates, to diagnose a stream that stays on \"Tuning\" and never plays. Off by default: SDP holds session ICE credentials. An answer with no candidates is always logged as a warning. The stream key is taken out of every answer, the Clips recorder's too, before it is logged or used.",
+                        "default": false
+                    }
+                ]
+            }
+        ]
+    }
+}

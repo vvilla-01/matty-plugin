@@ -1,0 +1,214 @@
+{
+  "streams": [
+    {
+      "handle": "5a46180e038b1848e98dbc138e006349",
+      "title": "Bob Turner",
+      "motd": "Back soon",
+      "paused": true,
+      "alwaysOn": false,
+      "viewers": 0,
+      "bitrate": 0,
+      "streamStart": "2099-01-01T00:00:00Z",
+      "videoTracks": 1,
+      "audioTracks": 0,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner",
+      "linkSource": "manual",
+      "awards": [
+        {
+          "id": "alltime",
+          "kind": "alltime",
+          "rank": 2,
+          "label": "2nd for airtime, all time"
+        },
+        {
+          "id": "month",
+          "kind": "month",
+          "rank": 1,
+          "label": "1st for airtime this month"
+        },
+        {
+          "id": "snooper",
+          "kind": "snooper",
+          "label": "Top Snooper, all time"
+        }
+      ]
+    },
+    {
+      "handle": "953be3163193b9e7d07a18d291d6b21b",
+      "title": "Dave",
+      "motd": "Dave plays Dave things",
+      "paused": false,
+      "alwaysOn": false,
+      "viewers": 0,
+      "bitrate": 2500000,
+      "streamStart": "2099-01-01T00:00:00Z",
+      "videoTracks": 1,
+      "audioTracks": 1,
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave",
+      "linkSource": "manual",
+      "awards": [
+        {
+          "id": "month",
+          "kind": "month",
+          "rank": 3,
+          "label": "3rd for airtime this month"
+        },
+        {
+          "id": "alltime",
+          "kind": "alltime",
+          "rank": 1,
+          "label": "1st for airtime, all time"
+        }
+      ],
+      "nowPlaying": {
+        "category": "game",
+        "title": "ELDEN RING"
+      }
+    },
+    {
+      "handle": "8f9035724a3a84880e720c65d6c46437",
+      "title": "Dan's stream",
+      "paused": false,
+      "alwaysOn": false,
+      "viewers": 0,
+      "bitrate": 900000,
+      "streamStart": "2099-01-01T00:00:00Z",
+      "videoTracks": 1,
+      "audioTracks": 0,
+      "awards": [
+        {
+          "id": "alltime",
+          "kind": "alltime",
+          "rank": 3,
+          "label": "3rd for airtime, all time"
+        },
+        {
+          "id": "month",
+          "kind": "month",
+          "rank": 2,
+          "label": "2nd for airtime this month"
+        }
+      ]
+    },
+    {
+      "handle": "d823e2adfab21766c16ddbae0d7f6a35",
+      "title": "Lo-fi radio",
+      "motd": "Music around the clock.",
+      "paused": false,
+      "alwaysOn": true,
+      "viewers": 0,
+      "bitrate": 0,
+      "streamStart": "2099-01-01T00:00:00Z",
+      "videoTracks": 1,
+      "audioTracks": 0,
+      "pictureVersion": "3867329d3fec"
+    }
+  ],
+  "boards": {
+    "version": "VERSION"
+  },
+  "banners": {
+    "version": "a2435c1c505703a9"
+  },
+  "schedule": [
+    {
+      "id": "00000000000000d4",
+      "title": "Arma co-op",
+      "startsAt": 1790946000000,
+      "category": "game",
+      "userId": "u-dave",
+      "who": "Dave",
+      "joined": [
+        {
+          "userId": "u-bob",
+          "who": "Bob Turner"
+        }
+      ],
+      "full": false
+    }
+  ],
+  "voice": {
+    "connected": true,
+    "people": [
+      {
+        "name": "Dave",
+        "userId": "u-dave",
+        "muted": true
+      },
+      {
+        "name": "Dave (phone)",
+        "userId": "u-dave"
+      },
+      {
+        "name": "Bob",
+        "userId": "u-bob",
+        "muted": true
+      },
+      {
+        "name": "Guest"
+      }
+    ]
+  },
+  "people": {
+    "u-bob": {
+      "voice": "muted",
+      "badge": "birthday",
+      "awards": [
+        {
+          "id": "alltime",
+          "kind": "alltime",
+          "rank": 2,
+          "label": "2nd for airtime, all time"
+        },
+        {
+          "id": "month",
+          "kind": "month",
+          "rank": 1,
+          "label": "1st for airtime this month"
+        },
+        {
+          "id": "snooper",
+          "kind": "snooper",
+          "label": "Top Snooper, all time"
+        },
+        {
+          "id": "clipper",
+          "kind": "clipper",
+          "label": "Best Clipper, all time"
+        }
+      ]
+    },
+    "u-dave": {
+      "live": "953be3163193b9e7d07a18d291d6b21b",
+      "voice": "open",
+      "badge": "live",
+      "awards": [
+        {
+          "id": "month",
+          "kind": "month",
+          "rank": 3,
+          "label": "3rd for airtime this month"
+        },
+        {
+          "id": "alltime",
+          "kind": "alltime",
+          "rank": 1,
+          "label": "1st for airtime, all time"
+        }
+      ]
+    }
+  },
+  "fetchedAt": 0,
+  "configured": true,
+  "livePreviews": true,
+  "clips": {
+    "enabled": false,
+    "lengthSeconds": 120,
+    "retentionDays": 30,
+    "count": 0
+  }
+}

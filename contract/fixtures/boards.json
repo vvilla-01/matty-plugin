@@ -1,0 +1,321 @@
+{
+  "version": "VERSION",
+  "allTime": [
+    {
+      "rank": 1,
+      "title": "Dave",
+      "seconds": 7200,
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave"
+    },
+    {
+      "rank": 2,
+      "title": "Bob Turner",
+      "seconds": 3600,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner"
+    },
+    {
+      "rank": 3,
+      "title": "Dan's stream",
+      "seconds": 1800
+    }
+  ],
+  "month": [
+    {
+      "rank": 1,
+      "title": "Bob Turner",
+      "seconds": 600,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner"
+    },
+    {
+      "rank": 2,
+      "title": "Dan's stream",
+      "seconds": 450
+    },
+    {
+      "rank": 3,
+      "title": "Dave",
+      "seconds": 300,
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave"
+    }
+  ],
+  "monthLabel": "MONTH",
+  "allTimeTotal": 3,
+  "monthTotal": 3,
+  "monthMedals": [
+    {
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner",
+      "gold": [
+        "2026-06"
+      ],
+      "silver": [
+        "2026-05"
+      ]
+    },
+    {
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave",
+      "gold": [
+        "2026-05"
+      ],
+      "silver": [
+        "2026-06"
+      ]
+    }
+  ],
+  "watchBoards": true,
+  "watchMonth": [
+    {
+      "rank": 1,
+      "title": "Bob Turner",
+      "seconds": 1200,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner"
+    }
+  ],
+  "watchAllTime": [
+    {
+      "rank": 1,
+      "title": "Bob Turner",
+      "seconds": 90000,
+      "userId": "u-bob",
+      "username": "bob",
+      "displayName": "Bob Turner"
+    },
+    {
+      "rank": 2,
+      "title": "Dave",
+      "seconds": 4000,
+      "userId": "u-dave",
+      "username": "dave",
+      "displayName": "Dave"
+    }
+  ],
+  "watchMonthTotal": 1,
+  "watchAllTimeTotal": 2,
+  "bestClipper": {
+    "userId": "u-bob",
+    "username": "bob",
+    "displayName": "Bob Turner",
+    "upvotes": 12,
+    "clips": 3,
+    "since": 1790000000000,
+    "bestClip": {
+      "id": "00000000000000a1"
+    }
+  },
+  "fans": [
+    {
+      "streamerId": "u-dave",
+      "streamer": "Dave",
+      "fanId": "u-bob",
+      "fan": "Bob Turner",
+      "fanUsername": "bob",
+      "hours": 25
+    }
+  ],
+  "fansOn": true,
+  "achievementKinds": [
+    {
+      "id": "streamed",
+      "name": "Streamed",
+      "unit": "hours",
+      "tiers": [
+        10,
+        50,
+        100,
+        250,
+        500,
+        1000
+      ],
+      "names": [
+        "Streamed 10 hours",
+        "Streamed 50 hours",
+        "Streamed 100 hours",
+        "Streamed 250 hours",
+        "Streamed 500 hours",
+        "Streamed 1000 hours"
+      ]
+    },
+    {
+      "id": "podium",
+      "name": "Podium",
+      "unit": "months",
+      "tiers": [
+        1,
+        3,
+        6,
+        12
+      ],
+      "names": [
+        "On the podium 1 month",
+        "On the podium 3 months",
+        "On the podium 6 months",
+        "On the podium 12 months"
+      ]
+    }
+  ],
+  "achievements": [
+    {
+      "userId": "u-bob",
+      "displayName": "Bob Turner",
+      "username": "bob",
+      "have": [
+        {
+          "id": "podium",
+          "tier": 1
+        }
+      ]
+    },
+    {
+      "userId": "u-dave",
+      "displayName": "Dave",
+      "username": "dave",
+      "have": [
+        {
+          "id": "podium",
+          "tier": 1
+        }
+      ]
+    }
+  ],
+  "people": {
+    "u-bob": {
+      "rows": [
+        {
+          "kind": "board",
+          "id": "alltime",
+          "rank": 2,
+          "title": "Runner-up",
+          "board": "All time",
+          "seconds": 3600
+        },
+        {
+          "kind": "board",
+          "id": "month",
+          "rank": 1,
+          "title": "Champion",
+          "board": "MONTH",
+          "seconds": 600
+        },
+        {
+          "kind": "board",
+          "id": "snooper",
+          "rank": 1,
+          "title": "Top Snooper",
+          "board": "All time",
+          "seconds": 90000,
+          "doing": "watching others"
+        },
+        {
+          "kind": "clipper",
+          "id": "clipper",
+          "rank": 1,
+          "title": "Best Clipper",
+          "upvotes": 12,
+          "clips": 3
+        },
+        {
+          "kind": "fan",
+          "id": "fan:u-dave",
+          "rank": 1,
+          "title": "Biggest fan of Dave",
+          "streamerId": "u-dave",
+          "streamer": "Dave",
+          "hours": 25
+        },
+        {
+          "kind": "achievements",
+          "id": "achievements",
+          "rank": 0,
+          "title": "Achievements",
+          "steps": [
+            {
+              "id": "podium",
+              "tier": 1,
+              "name": "On the podium 1 month"
+            }
+          ]
+        },
+        {
+          "kind": "months",
+          "id": "past",
+          "rank": 1,
+          "title": "Monthly champion",
+          "gold": [
+            "2026-06"
+          ],
+          "tallies": [
+            {
+              "rank": 2,
+              "months": [
+                "2026-05"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "u-dave": {
+      "rows": [
+        {
+          "kind": "board",
+          "id": "alltime",
+          "rank": 1,
+          "title": "Champion",
+          "board": "All time",
+          "seconds": 7200
+        },
+        {
+          "kind": "board",
+          "id": "month",
+          "rank": 3,
+          "title": "Third place",
+          "board": "MONTH",
+          "seconds": 300
+        },
+        {
+          "kind": "achievements",
+          "id": "achievements",
+          "rank": 0,
+          "title": "Achievements",
+          "steps": [
+            {
+              "id": "podium",
+              "tier": 1,
+              "name": "On the podium 1 month"
+            }
+          ]
+        },
+        {
+          "kind": "months",
+          "id": "past",
+          "rank": 1,
+          "title": "Monthly champion",
+          "gold": [
+            "2026-05"
+          ],
+          "tallies": [
+            {
+              "rank": 2,
+              "months": [
+                "2026-06"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

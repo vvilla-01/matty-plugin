@@ -1,0 +1,17 @@
+{
+  "on": true,
+  "ready": true,
+  "mattermost": true,
+  "people": 1,
+  "devices": 1,
+  "hosts": [
+    {
+      "host": "push.example.net",
+      "devices": 1,
+      "working": 1,
+      "waiting": 0,
+      "failing": 0,
+      "refused": 0
+    }
+  ]
+}

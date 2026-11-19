@@ -1,0 +1,4 @@
+{
+  "error": "This check message is not the latest one sent to this phone, or it has expired.",
+  "code": "conflict"
+}

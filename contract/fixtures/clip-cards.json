@@ -1,0 +1,28 @@
+{
+  "cards": {
+    "00000000000000a1": {
+      "id": "00000000000000a1",
+      "title": "clip 00000000000000a1",
+      "createdAt": 1790971200000,
+      "expiresAt": 1793563200000,
+      "durationMs": 10000,
+      "thumb": "c2c26490",
+      "clipper": {
+        "userId": "uid-bob",
+        "username": "bob",
+        "displayName": "Bob",
+        "name": "Bob"
+      },
+      "streamer": {
+        "userId": "uid-dave",
+        "username": "dave",
+        "displayName": "Dave",
+        "name": "Dave"
+      },
+      "upvotes": 2,
+      "voted": true,
+      "canVote": true
+    },
+    "00000000000000b2": null
+  }
+}

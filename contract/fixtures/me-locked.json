@@ -1,0 +1,32 @@
+{
+  "contract": 4,
+  "version": "VERSION",
+  "name": "Matty",
+  "artwork": {
+    "emblem": false,
+    "ghost": false
+  },
+  "release": {
+    "state": "unsigned",
+    "version": "VERSION"
+  },
+  "app": {
+    "check": "report",
+    "state": "none"
+  },
+  "userId": "uid-dan",
+  "username": "dan",
+  "streamKey": "",
+  "access": "locked",
+  "badgeEnabled": false,
+  "autoLinkByUsername": true,
+  "linkedLive": false,
+  "styleCodeBlocks": false,
+  "openPanel": "never",
+  "noSignalGhost": "occasional",
+  "bannerText": "",
+  "bannerColor": "",
+  "bannerPlacement": "both",
+  "configured": true,
+  "isAdmin": false
+}

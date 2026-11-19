@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matty Plugin lab</title>
+<style>
+    :root {
+        color-scheme: dark;
+        --lab-bg: #14161a;
+        --lab-card: #1b1e24;
+        --lab-line: #2b303a;
+        --lab-text: #dfe3ea;
+        --lab-muted: #8c94a3;
+        --lab-accent: #4a7ce8;
+    }
+
+    html, body {
+        margin: 0;
+        height: 100%;
+    }
+
+    body {
+        background: var(--lab-bg);
+        color: var(--lab-text);
+        font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    .lab {
+        display: flex;
+        align-items: flex-start;
+        gap: 22px;
+        min-height: 100%;
+        padding: 22px;
+    }
+
+    .lab-panel {
+        flex: 1 1 340px;
+        min-width: 320px;
+        max-width: 560px;
+    }
+
+    .lab-title {
+        margin: 0 0 4px;
+        font-size: 18px;
+        font-weight: 600;
+    }
+
+    .lab-subtitle {
+        margin: 26px 0 4px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .lab-blurb {
+        margin: 0 0 16px;
+        color: var(--lab-muted);
+        font-size: 12px;
+    }
+
+    .lab-row {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 7px 0;
+        border-top: 1px solid var(--lab-line);
+    }
+
+    .lab-label {
+        flex: 0 0 104px;
+        color: var(--lab-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    .lab-controls {
+        display: flex;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .lab-chip {
+        padding: 3px 9px;
+        border: 1px solid var(--lab-line);
+        border-radius: 999px;
+        background: var(--lab-card);
+        color: var(--lab-text);
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+    }
+
+    .lab-chip:hover:enabled {
+        border-color: var(--lab-muted);
+    }
+
+    .lab-chip:disabled {
+        cursor: default;
+        opacity: 0.4;
+    }
+
+    .lab-chip[aria-pressed="true"] {
+        border-color: var(--lab-accent);
+        background: rgba(74, 124, 232, 0.18);
+    }
+
+    .lab-chip-remove,
+    .lab-chip-reset {
+        color: var(--lab-muted);
+    }
+
+    .lab-note {
+        color: var(--lab-muted);
+        font-size: 11px;
+    }
+
+    /* The channel and the side panel beside it, as tall as the window, so the
+       panel's own scrolling and the small player's corner are the things being
+       looked at. Relative, so an expanded side panel can lie over the channel. */
+    .lab-stage {
+        position: sticky;
+        top: 22px;
+        display: flex;
+        flex: 1 1 auto;
+        min-width: 0;
+        height: calc(100vh - 44px);
+        min-height: 520px;
+    }
+
+    /* A stand-in for Mattermost's right-hand sidebar: the same dark surround,
+       and #sidebar-right, which is what the panel looks for. */
+    .lab-rhs {
+        display: flex;
+        flex: 0 0 auto;
+        flex-direction: column;
+        height: 100%;
+        border: 1px solid var(--lab-line);
+        border-radius: 0 8px 8px 0;
+        background: #000000;
+        overflow: hidden;
+    }
+
+    .lab-rhs[data-expanded="true"] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 20;
+        width: 72%;
+        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .lab-rhs-spacer {
+        flex: 0 0 auto;
+    }
+
+    /* Mattermost's channel: header, message list, message box. */
+    .lab-center {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+        border: 1px solid var(--lab-line);
+        border-right: none;
+        border-radius: 8px 0 0 8px;
+        background: #1b1d22;
+        overflow: hidden;
+    }
+
+    .lab-app-content {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .lab-channel-header {
+        display: flex;
+        flex: 0 0 48px;
+        align-items: center;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--lab-line);
+        font-weight: 600;
+    }
+
+    .lab-bookmarks {
+        display: flex;
+        flex: 0 0 34px;
+        align-items: center;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--lab-line);
+        color: var(--lab-muted);
+        font-size: 12px;
+    }
+
+    .lab-post-list {
+        position: relative;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .lab-post-scroll {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 8px 16px;
+    }
+
+    .lab-center-post {
+        position: relative;
+        padding: 6px 44px 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .lab-center-click {
+        cursor: pointer;
+    }
+
+    .lab-reply-arrow {
+        position: absolute;
+        top: 8px;
+        right: 4px;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--lab-line);
+        border-radius: 6px;
+        background: var(--lab-card);
+        color: var(--lab-text);
+        cursor: pointer;
+    }
+
+    .lab-post-create {
+        flex: 0 0 auto;
+        padding: 10px 16px 14px;
+        border-top: 1px solid var(--lab-line);
+    }
+
+    .lab-message {
+        padding: 2px 0;
+        border-radius: 4px;
+    }
+
+    .lab-message[data-pending="true"] {
+        opacity: 0.6;
+    }
+
+    .lab-message:focus {
+        outline: 1px solid var(--lab-accent);
+    }
+
+    .lab-failed {
+        color: #e0707f;
+    }
+
+    .lab-link {
+        padding: 0;
+        border: none;
+        background: none;
+        color: #8ab4ff;
+        cursor: pointer;
+        font: inherit;
+        text-decoration: underline;
+    }
+
+    .lab-thread {
+        gap: 6px;
+        overflow-y: auto;
+    }
+
+    .lab-thread-tools,
+    .lab-popup {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .lab-popup {
+        padding: 8px;
+        border: 1px solid var(--lab-line);
+        border-radius: 6px;
+        background: var(--lab-card);
+    }
+
+    .lab-attachment {
+        padding: 6px 10px;
+        border: 1px dashed var(--lab-line);
+        border-radius: 6px;
+        color: var(--lab-muted);
+        font-size: 12px;
+    }
+
+    .lab-result {
+        margin-top: 8px;
+        padding: 6px 8px;
+        border: 1px solid var(--lab-line);
+        border-radius: 6px;
+        background: var(--lab-card);
+        color: var(--lab-text);
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+    }
+
+    .lab-rhs-back {
+        margin-left: 8px;
+    }
+
+    /* Matched to Mattermost's .sidebar--right__header and
+       .sidebar--right__title, so the plugin's title node is laid out here
+       exactly as it is there. */
+    .lab-rhs-head {
+        display: flex;
+        overflow: hidden;
+        align-items: center;
+        justify-content: space-between;
+        flex: 0 0 56px;
+        padding: 0 16px 0 0;
+        border-bottom: 1px solid var(--lab-line);
+        background: #101216;
+        white-space: nowrap;
+    }
+
+    .lab-rhs-title {
+        display: flex;
+        overflow: hidden;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0 16px;
+        font: 600 16px/1 system-ui, sans-serif;
+    }
+
+    .lab-rhs-controls {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+    }
+
+    .lab-rhs-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        color: var(--lab-muted);
+        font-size: 15px;
+    }
+
+    .lab-rhs-body {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    /* What stands in the panel's place when something else has the side
+       panel: a thread, a search, another plugin. Plain on purpose — only
+       the panel's coming and going is being looked at. */
+    .lab-rhs-other {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 0;
+        padding: 14px;
+        background: #101216;
+    }
+
+    .lab-rhs-other .lab-post-body {
+        margin-bottom: 12px;
+    }
+
+    .lab-reply {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 64px;
+        padding: 8px 10px;
+        border: 1px solid var(--lab-line);
+        border-radius: 6px;
+        background: var(--lab-card);
+        color: var(--lab-text);
+        font: inherit;
+        font-size: 13px;
+        resize: vertical;
+    }
+
+    .lab-rhs-close {
+        border: none;
+        background: none;
+        cursor: pointer;
+    }
+
+    .lab-rhs-away {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        color: var(--lab-muted);
+        font-size: 12px;
+        text-align: center;
+    }
+
+    .lab-counters {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* A stand-in for Mattermost's popped-out side panel: a window's worth of
+       page, laid out with Mattermost's own rules for it — #root a grid at LEAST
+       as tall as the window, not exactly as tall, and the panel in the flow of
+       the page rather than laid over it. */
+    .lab-popout {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        overflow: hidden;
+        background: #000000;
+    }
+
+    .lab-popout #root {
+        display: grid;
+        overflow: hidden;
+        min-height: 100%;
+        grid-template-rows: min-content auto min-content;
+    }
+
+    .lab-popout .main-wrapper.rhs-popout {
+        display: flex;
+    }
+
+    /* As strong as Mattermost's own (body.app__body #root .main-wrapper.rhs-popout
+       .sidebar--right), which outranks the plugin's side-panel width rule. */
+    .lab-popout #root .main-wrapper.rhs-popout .sidebar--right {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .lab-popout .sidebar-right__body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .lab-popout-banner {
+        background: #1e7a3a;
+        color: #ffffff;
+        font: 600 11px/18px system-ui, sans-serif;
+        text-align: center;
+    }
+
+    .lab-popout-exit {
+        position: fixed;
+        z-index: 101;
+        left: 8px;
+        top: 24px;
+    }
+
+    /* A stand-in for Mattermost 11.11's header search bar: a button showing
+       the words, and the box it opens, for the plugin's "Open in Mattermost
+       search" to press and search from. */
+    .lab-search-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .lab-search {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 4px 10px;
+        border: 1px solid var(--lab-line);
+        border-radius: 6px;
+        background: var(--lab-card);
+        color: var(--lab-muted);
+        font-size: 12px;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lab-search-box {
+        padding: 6px;
+        border: 1px solid var(--lab-line);
+        border-radius: 8px;
+        background: var(--lab-card);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+
+    .lab-search-input {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 4px 10px;
+        border: 1px solid var(--lab-line);
+        border-radius: 6px;
+        background: var(--lab-card);
+        color: var(--lab-text);
+        font: inherit;
+        font-size: 12px;
+    }
+
+    .lab-post {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 12px 0;
+        border: 1px solid var(--lab-line);
+        border-bottom: none;
+        border-radius: 8px 8px 0 0;
+        background: var(--lab-card);
+    }
+
+    .lab-post-name {
+        font-weight: 600;
+    }
+
+    .lab-post-badges {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .lab-post-time {
+        color: var(--lab-muted);
+        font-size: 12px;
+    }
+
+    .lab-post-body {
+        padding: 2px 12px 12px;
+        border: 1px solid var(--lab-line);
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        background: var(--lab-card);
+    }
+
+    /* The post on Mattermost's light themes: the white centre channel most
+       people have, where the badges' ink outline does the work the cream halo
+       does on black. */
+    .lab-post[data-theme="light"],
+    .lab-post-body[data-theme="light"] {
+        border-color: rgba(63, 67, 80, 0.16);
+        background: #ffffff;
+        color: #3f4350;
+        color-scheme: light;
+    }
+
+    .lab-post[data-theme="light"] .lab-post-time {
+        color: rgba(63, 67, 80, 0.64);
+    }
+
+    .lab-popover {
+        --center-channel-bg: var(--lab-card);
+        margin-top: 14px;
+        padding: 12px;
+        border: 1px solid var(--lab-line);
+        border-radius: 8px;
+        background: var(--lab-card);
+    }
+
+    /* Mattermost's light themes, for the popover alone: a white card and its
+       dark grey text, which the plugin's rows inherit. */
+    .lab-popover[data-theme="light"] {
+        --center-channel-bg: #ffffff;
+        border-color: rgba(63, 67, 80, 0.16);
+        background: #ffffff;
+        color: #3f4350;
+        color-scheme: light;
+    }
+
+    .lab-popover-name {
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
+
+    /* Shared clips: Mattermost's centre channel in Denim or Onyx (the
+       variables are set by LabCentre), with posts on it as Mattermost lays
+       them out: a name, and the message, here a card, under it. */
+    .lab-centre {
+        box-sizing: border-box;
+        max-width: 100%;
+        border-radius: 8px;
+        color-scheme: normal;
+    }
+
+    .lab-centre[data-theme="denim"] {
+        color-scheme: light;
+    }
+
+    .lab-centre[data-theme="onyx"] {
+        color-scheme: dark;
+    }
+
+    .lab-shared {
+        margin-top: 6px;
+    }
+
+    .lab-shared-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 10px 12px;
+    }
+
+    .lab-shared-item {
+        padding: 6px 0 8px;
+        border-bottom: 1px solid rgba(var(--center-channel-color-rgb), 0.08);
+    }
+
+    .lab-shared-item:last-child {
+        border-bottom: none;
+    }
+
+    .lab-shared-head {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 2px;
+    }
+
+    .lab-shared-name {
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .lab-shared-time,
+    .lab-shared-note {
+        color: rgba(var(--center-channel-color-rgb), 0.64);
+        font-size: 11px;
+    }
+
+    .lab-shared-note {
+        margin: 4px 0 0;
+        line-height: 1.4;
+    }
+
+    .lab-shared-text {
+        font-size: 14px;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+
+    /* Mattermost's permalink preview, round a post. */
+    .lab-permalink {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 12px;
+        border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .lab-permalink-head {
+        color: rgba(var(--center-channel-color-rgb), 0.64);
+        font-size: 12px;
+    }
+
+    /* A shared clip's card in the lab's own channel and threads. */
+    .lab-post-card {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .lab-post-card .lab-centre {
+        padding: 6px 12px 10px;
+        border-radius: 0 0 8px 8px;
+    }
+
+    /* A clip link's page in the lab's centre, and the sign-in page it sends
+       a signed-out reader to. */
+    .lab-cliplink {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px 16px;
+        overflow-y: auto;
+    }
+
+    .lab-cliplink-bar {
+        padding: 4px 10px;
+        border: 1px solid var(--lab-line);
+        border-radius: 999px;
+        color: var(--lab-muted);
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+    }
+
+    .lab-cliplink-page {
+        display: flex;
+        height: 160px;
+    }
+
+    .lab-cliplink-page > * {
+        flex: 1 1 auto;
+    }
+
+    .lab-cliplink-log {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--lab-muted);
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+    }
+
+    .lab-cliplink > .lab-chip {
+        align-self: flex-start;
+    }
+
+    .lab-login {
+        padding: 16px;
+        border: 1px solid var(--lab-line);
+        border-radius: 8px;
+        background: var(--lab-card);
+    }
+
+    .lab-login p {
+        margin: 0 0 10px;
+    }
+
+    /* What is left when the plugin throws: see Crashed in index.tsx. */
+    /* The lock's Lock words row: the unlock ten times slower, the
+       stylesheet's share of it to match PanelGate's slowed wait. */
+    .lab[data-slow-unlock="true"] .vntv-lock-shackle {
+        transition-duration: 1800ms !important;
+    }
+
+    .lab[data-slow-unlock="true"] .vntv-lock-emblem {
+        transition-duration: 1600ms !important;
+    }
+
+    .lab[data-slow-unlock="true"] .vntv-lock[data-unlocking="true"] .vntv-lock-stage,
+    .lab[data-slow-unlock="true"] .vntv-lock[data-unlocking="true"] .vntv-lock-dock {
+        animation-duration: 2600ms !important;
+        animation-delay: 1600ms !important;
+    }
+
+    .lab-crash {
+        max-width: 760px;
+        margin: 22px;
+        padding: 16px 18px;
+        border: 1px solid var(--lab-accent);
+        border-radius: 8px;
+        background: var(--lab-card);
+    }
+
+    .lab-crash p {
+        margin: 0 0 8px;
+        font-weight: 600;
+    }
+
+    .lab-crash pre {
+        margin: 0;
+        color: var(--lab-muted);
+        white-space: pre-wrap;
+    }
+
+    /* Twitch's player, as the lab stands it in (mocks/twitchEmbed.tsx): its
+       own element, never a frame, the size the real one would be, with the
+       channel, its sound as it loaded, which load this is, and a slow bar
+       across the bottom so a reload is seen to start again. */
+    .vntv-lab-twitch-standin {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        box-sizing: border-box;
+        overflow: hidden;
+        background: repeating-linear-gradient(135deg, #17171c 0 14px, #1d1d23 14px 28px);
+        color: #e6e6e6;
+        font: 13px/1.3 system-ui, sans-serif;
+        line-height: 1.3;
+        outline: 1px dashed rgba(255, 255, 255, 0.25);
+        outline-offset: -1px;
+    }
+
+    .vntv-lab-twitch-standin-head {
+        font-weight: 700;
+        letter-spacing: 0.04em;
+    }
+
+    .vntv-lab-twitch-standin-line {
+        color: #a8a8a8;
+        font-size: 12px;
+    }
+
+    .vntv-lab-twitch-standin-sound {
+        padding: 1px 8px;
+        border: 1px solid #555555;
+        border-radius: 999px;
+        color: #a8a8a8;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .vntv-lab-twitch-standin-sound[data-sound="true"] {
+        border-color: var(--lab-accent);
+        background: rgba(74, 124, 232, 0.35);
+        color: #ffffff;
+    }
+
+    .vntv-lab-twitch-standin-bar {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 3px;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.5);
+        transform-origin: left;
+        animation: lab-twitch-load 6s linear both;
+    }
+
+    @keyframes lab-twitch-load {
+        from { transform: scaleX(0); }
+        to { transform: scaleX(1); }
+    }
+
+    /* Where a link the viewer chose would have gone (openOutside). */
+    .lab-toast {
+        position: fixed;
+        z-index: 2000;
+        left: 50%;
+        bottom: 22px;
+        max-width: 80vw;
+        transform: translateX(-50%);
+        padding: 8px 14px;
+        border: 1px solid var(--lab-line);
+        border-radius: 8px;
+        background: var(--lab-card);
+        color: var(--lab-text);
+        font-size: 13px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+
+
+    /* ---- 3.2.0 (lab/rows320.tsx, lab/atMention.tsx) ---- */
+    .lab-p320 {
+        margin-bottom: 18px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--lab-line);
+    }
+
+    .lab-p320 .lab-subtitle {
+        margin-top: 8px;
+    }
+
+    .lab-p320-stage {
+        display: grid;
+        grid-template-columns: repeat(2, 280px);
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .lab-p320-col {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    /* A post in Mattermost's centre channel. */
+    .lab-p320-post {
+        padding: 10px 14px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 20px;
+    }
+
+    .lab-p320-post-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .lab-p320-post-name {
+        font-weight: 600;
+    }
+
+    .lab-p320-post-badges {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .lab-p320-post-time {
+        font-size: 12px;
+        opacity: 0.64;
+    }
+
+    /* Mattermost's AtMention outside the panel's own rules: the theme's link
+       colour, as Mattermost's _mentions.scss has it, and its button with no
+       furniture (style--none). */
+    .mention-link {
+        color: var(--link-color, #5d89ea);
+    }
+
+    button.style--none {
+        padding: 0;
+        border: none;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    /* Mattermost's profile popover, near enough: 240px wide, as
+       profile_popover.scss has it. */
+    .lab-mm-popover {
+        box-sizing: border-box;
+        width: 240px;
+        padding: 16px;
+        border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+        font-size: 14px;
+        line-height: 20px;
+    }
+
+    .lab-mm-popover-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+
+    .vntv-face.lab-mm-popover-face {
+        width: 52px;
+        height: 52px;
+        font-size: 18px;
+    }
+
+    .lab-mm-popover-name {
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .lab-mm-popover-user {
+        font-size: 13px;
+        opacity: 0.64;
+    }
+
+    .lab-mm-popover-buttons {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .lab-mm-popover-button {
+        flex: 1 1 0;
+        padding: 6px 0;
+        border-radius: 4px;
+        background: var(--button-bg);
+        color: var(--button-color);
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .lab-mm-popover-button-quiet {
+        background: rgba(var(--button-bg-rgb), 0.08);
+        color: var(--button-bg);
+    }
+
+    .lab-mm-float .lab-mm-popover {
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Mattermost's posts in its centre channel, in Denim or Onyx, round the
+       plan and clip cards (the Plans row): a face, a name with the plugin's
+       badges, a time, the card, and Mattermost's own reactions under it. */
+    .lab-mm-frame {
+        max-width: 100%;
+    }
+
+    /* As narrow as a thread in Mattermost's side panel (the row's "304px
+       thread"): the posts' own padding is the side panel's, tighter. */
+    .lab-mm-frame[data-rhs="true"] .lab-mm-post {
+        padding: 6px 12px 8px;
+    }
+
+    .lab-mm-frame[data-rhs="true"] .lab-mm-caption {
+        margin: 8px 12px 0 56px;
+    }
+
+    .lab-mm-list {
+        display: flex;
+        flex-direction: column;
+        padding: 6px 0 10px;
+    }
+
+    .lab-mm-item {
+        padding: 0 0 4px;
+    }
+
+    .lab-mm-caption {
+        margin: 8px 20px 0 72px;
+        color: rgba(var(--center-channel-color-rgb), 0.48);
+        font-size: 11px;
+        font-style: italic;
+    }
+
+    .lab-mm-post {
+        display: flex;
+        gap: 12px;
+        padding: 6px 20px 8px;
+        font-family: 'Open Sans', system-ui, sans-serif;
+    }
+
+    .lab-mm-post .lab-mm-avatar {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+        box-shadow: none;
+        font-size: 12px;
+    }
+
+    .lab-mm-main {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .lab-mm-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 2px;
+    }
+
+    .lab-mm-name {
+        font-size: 15px;
+        font-weight: 600;
+    }
+
+    .lab-mm-badges {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .lab-mm-time {
+        color: rgba(var(--center-channel-color-rgb), 0.64);
+        font-size: 12px;
+    }
+
+    .lab-mm-reactions {
+        display: flex;
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    .lab-mm-reaction {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 24px;
+        padding: 0 6px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: rgba(var(--center-channel-color-rgb), 0.08);
+        color: rgba(var(--center-channel-color-rgb), 0.64);
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .lab-mm-reaction[data-mine="true"] {
+        border-color: var(--button-bg);
+        background: rgba(var(--button-bg-rgb), 0.08);
+        color: var(--button-bg);
+    }
+
+    .lab-mm-reaction-emoji {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    /* The Up next cards' tools shown without a pointer, as on a touch screen
+       (the Plans row's "card tools shown"). */
+    .lab[data-tools-shown="true"] .vntv-upnext-share,
+    .lab[data-tools-shown="true"] .vntv-upnext-edit,
+    .lab[data-tools-shown="true"] .vntv-upnext-remove {
+        opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .vntv-lab-twitch-standin-bar {
+            animation: none;
+        }
+    }
+</style>
+<!-- Mattermost's theme on the stand-in sidebar and channel. Query:
+     ?theme=plugin|onyx|denim (or window.__labFlags, set by a shooter before
+     the page loads). The switch at the bottom left reloads. -->
+<style id="lab-preview-static">
+    :root {
+        --elevation-1: 0 2px 3px 0 rgba(0, 0, 0, 0.08);
+        --elevation-2: 0 4px 6px 0 rgba(0, 0, 0, 0.12);
+        --elevation-3: 0 6px 14px 0 rgba(0, 0, 0, 0.12);
+        --elevation-4: 0 8px 24px 0 rgba(0, 0, 0, 0.12);
+        --elevation-5: 0 12px 32px 0 rgba(0, 0, 0, 0.12);
+        --elevation-6: 0 20px 32px 0 rgba(0, 0, 0, 0.12);
+        --icon-opacity: 0.64;
+    }
+    .lab-rhs, .lab-center {
+        background: var(--center-channel-bg);
+        color: var(--center-channel-color);
+        border-color: rgba(var(--center-channel-color-rgb), 0.12);
+    }
+    .lab-rhs-head, .lab-channel-header, .lab-bookmarks, .lab-post-create {
+        background: var(--center-channel-bg);
+        color: var(--center-channel-color);
+        border-color: rgba(var(--center-channel-color-rgb), 0.12);
+    }
+    .lab-rhs-title {
+        font: 600 16px/1 Metropolis, "Open Sans", system-ui, sans-serif;
+        color: var(--center-channel-color);
+    }
+    .lab-rhs-btn, .lab-rhs-close, .lab-rhs-controls button {
+        color: rgba(var(--center-channel-color-rgb), 0.64);
+    }
+    .lab-bookmarks, .lab-rhs-away { color: rgba(var(--center-channel-color-rgb), 0.64); }
+    .lab-center-post { border-bottom-color: rgba(var(--center-channel-color-rgb), 0.08); }
+    .lab-center .lab-reply-arrow {
+        border-color: rgba(var(--center-channel-color-rgb), 0.16);
+        background: var(--center-channel-bg);
+        color: rgba(var(--center-channel-color-rgb), 0.64);
+    }
+    .lab-center .lab-reply, .lab-rhs-other .lab-reply {
+        border: 2px solid rgba(var(--center-channel-color-rgb), 0.16);
+        border-radius: 4px;
+        background: var(--center-channel-bg);
+        color: var(--center-channel-color);
+    }
+    .lab-rhs-other { background: var(--center-channel-bg); color: var(--center-channel-color); }
+    .lab-center .lab-post, .lab-center .lab-post-body {
+        border-color: rgba(var(--center-channel-color-rgb), 0.12);
+        background: var(--center-channel-bg);
+        color: var(--center-channel-color);
+    }
+    .lab-center .lab-post-time, .lab-center .lab-center-post { color: rgba(var(--center-channel-color-rgb), 0.64); }
+    .lab-center .lab-post-body, .lab-center .lab-post { color: var(--center-channel-color); }
+    .lab-rhs-head .lab-rhs-btn {
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        width: 32px;
+        height: 32px;
+    }
+    .lab-preview-switch {
+        position: fixed;
+        left: 8px;
+        bottom: 8px;
+        z-index: 2000;
+        display: flex;
+        gap: 6px;
+        padding: 6px 8px;
+        border: 1px solid #2b303a;
+        border-radius: 6px;
+        background: #1b1e24;
+        color: #dfe3ea;
+        font: 12px system-ui, sans-serif;
+    }
+    .lab-preview-switch select { font: inherit; }
+</style>
+<style id="lab-theme"></style>
+<script>
+(function () {
+    var THEMES = {
+        plugin: {scheme: 'dark', bg: '#000000', bgRgb: '0, 0, 0', cc: '#dddddd', ccRgb: '221, 221, 221', button: '#c8102e', buttonRgb: '200, 16, 46', buttonColor: '#000000', link: '#f00313', error: '#f00313', errorRgb: '240, 3, 19', dnd: '#d24b4e', dndRgb: '210, 75, 78', active: '#c8102e', headerBg: '#000000', highlight: '#500612', highlightRgb: '80, 6, 18'},
+        onyx: {scheme: 'dark', bg: '#191b1f', bgRgb: '25, 27, 31', cc: '#e3e4e8', ccRgb: '227, 228, 232', button: '#4a7ce8', buttonRgb: '74, 124, 232', buttonColor: '#ffffff', link: '#5d89ea', error: '#da6c6e', errorRgb: '218, 108, 110', dnd: '#d24b4e', dndRgb: '210, 75, 78', active: '#4a7ce8', headerBg: '#24272d', highlight: '#0d6e6e', highlightRgb: '13, 110, 110'},
+        denim: {scheme: 'light', bg: '#ffffff', bgRgb: '255, 255, 255', cc: '#3f4350', ccRgb: '63, 67, 80', button: '#1c58d9', buttonRgb: '28, 88, 217', buttonColor: '#ffffff', link: '#386fe5', error: '#d24b4e', errorRgb: '210, 75, 78', dnd: '#d24b4e', dndRgb: '210, 75, 78', active: '#5d89ea', headerBg: '#192a4d', highlight: '#ffd470', highlightRgb: '255, 212, 112'}
+    };
+    var DEFAULTS = {theme: 'plugin'};
+    var flags = {};
+    var injected = window.__labFlags || {};
+    var query = new URLSearchParams(location.search);
+    Object.keys(DEFAULTS).forEach(function (key) {
+        flags[key] = injected[key] || query.get(key) || DEFAULTS[key];
+    });
+    if (!THEMES[flags.theme]) { flags.theme = 'plugin'; }
+    var root = document.documentElement;
+    root.dataset.labTheme = flags.theme;
+    var t = THEMES[flags.theme];
+    document.getElementById('lab-theme').textContent =
+        ':root, #sidebar-right, .lab-center, .lab-popout, body > .vntv {' +
+        'color-scheme: ' + t.scheme + ';' +
+        '--center-channel-bg: ' + t.bg + '; --center-channel-bg-rgb: ' + t.bgRgb + ';' +
+        '--center-channel-color: ' + t.cc + '; --center-channel-color-rgb: ' + t.ccRgb + ';' +
+        '--button-bg: ' + t.button + '; --button-bg-rgb: ' + t.buttonRgb + ';' +
+        '--button-color: ' + t.buttonColor + ';' +
+        '--link-color: ' + t.link + ';' +
+        '--error-text: ' + t.error + '; --error-text-color-rgb: ' + t.errorRgb + ';' +
+        '--dnd-indicator: ' + t.dnd + '; --dnd-indicator-rgb: ' + t.dndRgb + ';' +
+        '--sidebar-text-active-border: ' + t.active + ';' +
+        '--sidebar-header-bg: ' + t.headerBg + ';' +
+        '--mention-highlight-bg: ' + t.highlight + '; --mention-highlight-bg-rgb: ' + t.highlightRgb + ';' +
+        '--border-default: solid 1px rgba(' + t.ccRgb + ', 0.12);' +
+        '}';
+    window.__labPreview = flags;
+    document.addEventListener('DOMContentLoaded', function () {
+        var box = document.createElement('div');
+        box.className = 'lab-preview-switch';
+        var choices = {theme: ['plugin', 'onyx', 'denim']};
+        Object.keys(choices).forEach(function (key) {
+            var label = document.createElement('label');
+            label.textContent = key + ' ';
+            var select = document.createElement('select');
+            choices[key].forEach(function (value) {
+                var option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                option.selected = flags[key] === value;
+                select.appendChild(option);
+            });
+            select.addEventListener('change', function () {
+                var next = new URLSearchParams(location.search);
+                next.set(key, select.value);
+                location.search = next.toString();
+            });
+            label.appendChild(select);
+            box.appendChild(label);
+        });
+        document.body.appendChild(box);
+    });
+})();
+</script>
+</head>
+<body>
+<!--
+  This page bundles React 18, React DOM and the React scheduler (https://react.dev),
+  Copyright (c) Facebook, Inc. and its affiliates, each used under the MIT licence:
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the "Software"), to deal in
+  the Software without restriction, including without limitation the rights to
+  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+  the Software, and to permit persons to whom the Software is furnished to do so,
+  subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+  FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+  COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+  IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+  The Oswald font is inlined under the SIL Open Font License; the
+  full text ships with the plugin at server/static/fonts/OFL.txt.
+-->
+<div id="lab"></div>
+<!--LAB_SCRIPT-->
+</body>
+</html>

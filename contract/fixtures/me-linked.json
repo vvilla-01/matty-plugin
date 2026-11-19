@@ -1,0 +1,42 @@
+{
+  "contract": 4,
+  "version": "VERSION",
+  "name": "Matty",
+  "artwork": {
+    "emblem": false,
+    "ghost": false
+  },
+  "release": {
+    "state": "unsigned",
+    "version": "VERSION"
+  },
+  "app": {
+    "check": "report",
+    "state": "none"
+  },
+  "userId": "uid-dave",
+  "username": "dave",
+  "streamKey": "videokey-dave",
+  "access": "linked",
+  "popOut": true,
+  "alsoLetIn": false,
+  "badgeEnabled": false,
+  "autoLinkByUsername": true,
+  "linkedLive": true,
+  "styleCodeBlocks": false,
+  "openPanel": "never",
+  "noSignalGhost": "occasional",
+  "bannerText": "",
+  "bannerColor": "",
+  "bannerPlacement": "both",
+  "configured": true,
+  "isAdmin": false,
+  "media": {
+    "movies": false,
+    "games": false,
+    "igdb": false
+  },
+  "clipsStreamer": {
+    "allowed": true
+  }
+}

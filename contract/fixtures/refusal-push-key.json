@@ -1,0 +1,4 @@
+{
+  "error": "This phone registered with a push key that is not this server's. Ask again for the current key and register with it.",
+  "code": "push_key"
+}

@@ -1,0 +1,23 @@
+{
+  "access": "letIn",
+  "configured": true,
+  "contract": 4,
+  "version": "VERSION",
+  "name": "Matty",
+  "artwork": {
+    "emblem": false,
+    "ghost": false
+  },
+  "release": {
+    "state": "unsigned",
+    "version": "VERSION"
+  },
+  "app": {
+    "check": "report",
+    "state": "none"
+  },
+  "push": {
+    "state": "on",
+    "key": "BK8UtmwIe_r1iHnCUCwtfyLdim7yLbdkbmKZwTqV7MnNl5VnCeKHZq3ub19Z4gpI0ZInSuKT6e9Kbri3hfLRxqE"
+  }
+}

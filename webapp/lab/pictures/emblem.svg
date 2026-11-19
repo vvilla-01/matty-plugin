@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <title>Lab emblem</title>
+  <!-- A plain stand-in for an emblem a server's admin uploads: a grey disc, a ring and a play mark. -->
+  <circle cx="100" cy="100" r="96" fill="#5b6270"/>
+  <circle cx="100" cy="100" r="80" fill="none" stroke="#d5d9e0" stroke-width="8"/>
+  <path d="M82 66 L140 100 L82 134 Z" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,62 @@
+{
+  "v": "37cfc38f216d",
+  "steam": {
+    "on": true,
+    "fresh": true
+  },
+  "hytale": {
+    "on": true
+  },
+  "people": {
+    "acbobk00000000000000000000": {
+      "activity": {
+        "kind": "streaming",
+        "title": "Hades",
+        "source": "twitch"
+      }
+    },
+    "acboss00000000000000000000": {
+      "steam": {
+        "name": "Boss",
+        "url": "https://steamcommunity.com/profiles/76561197960287933",
+        "state": "away",
+        "inGame": true,
+        "game": "Factorio"
+      },
+      "activity": {
+        "kind": "playing",
+        "title": "Factorio",
+        "source": "steam"
+      }
+    },
+    "acdave00000000000000000000": {
+      "steam": {
+        "name": "Dave",
+        "url": "https://steamcommunity.com/profiles/76561197960287930",
+        "state": "online",
+        "inGame": true,
+        "game": "ELDEN RING"
+      },
+      "hytale": {
+        "name": "Steve_Hytale"
+      },
+      "activity": {
+        "kind": "streaming",
+        "title": "ELDEN RING",
+        "source": "steam"
+      }
+    },
+    "acerin00000000000000000000": {
+      "steam": {
+        "name": "Erin",
+        "url": "https://steamcommunity.com/profiles/76561197960287931",
+        "state": "offline"
+      },
+      "activity": {
+        "kind": "streaming",
+        "title": "Quantum of Solace",
+        "source": "panel"
+      }
+    }
+  }
+}

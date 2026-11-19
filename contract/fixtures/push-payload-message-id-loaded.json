@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "type": "message",
+  "user": "uid-dave",
+  "post": "post-2",
+  "channel": "chan-1",
+  "root": "",
+  "team": "team-1",
+  "sender": "",
+  "sender_name": "",
+  "channel_name": "",
+  "channel_type": "",
+  "text": "You've received a new message.",
+  "crt": false,
+  "id_loaded": true,
+  "from_webhook": false,
+  "at": 1791230401000
+}

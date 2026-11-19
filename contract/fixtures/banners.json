@@ -1,0 +1,23 @@
+{
+  "version": "a2435c1c505703a9",
+  "people": {
+    "alicebanner000000000000000": {
+      "v": "3867329d3fec3171",
+      "type": "image/png",
+      "crop": [
+        0,
+        0.3333,
+        1,
+        0.3333
+      ]
+    },
+    "bobbanner00000000000000000": {
+      "v": "8a9e5a822c02d62a",
+      "type": "image/jpeg"
+    },
+    "davebanner0000000000000000": {
+      "v": "3867329d3fec3171",
+      "type": "image/png"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "type": "message",
+  "user": "uid-dave",
+  "post": "post-1",
+  "channel": "chan-1",
+  "root": "root-1",
+  "team": "team-1",
+  "sender": "uid-bob",
+  "sender_name": "bob",
+  "channel_name": "Town Square",
+  "channel_type": "O",
+  "text": "bob: lunch?",
+  "crt": true,
+  "id_loaded": false,
+  "from_webhook": false,
+  "at": 1791230401000
+}

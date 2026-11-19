@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VillaNET WebCodecs probe</title>
+<pre id="out">running</pre>
+<script>
+// The contract's encoder settings (§7.2 step 1.4).
+const CBR = {codec: 'opus', sampleRate: 48000, numberOfChannels: 1, bitrate: 40000,
+    bitrateMode: 'constant', opus: {frameDuration: 20000, complexity: 10}};
+
+function seeded(seed) {
+    let s = seed;
+    return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+}
+
+// tone: 440 Hz. noise: seeded noise under a 3 Hz envelope, speech-like in rhythm.
+function signal(kind, seconds, amplitude) {
+    const n = Math.round(seconds * 48000);
+    const pcm = new Float32Array(n);
+    const rnd = seeded(1);
+    for (let i = 0; i < n; i++) {
+        const t = i / 48000;
+        pcm[i] = kind === 'tone' ?
+            amplitude * Math.sin(2 * Math.PI * 440 * t) :
+            amplitude * (rnd() * 2 - 1) * Math.abs(Math.sin(2 * Math.PI * 3 * t));
+    }
+    return pcm;
+}
+
+async function encode(pcm) {
+    const packets = [];
+    const encoder = new AudioEncoder({
+        output: (chunk) => { const b = new Uint8Array(chunk.byteLength); chunk.copyTo(b); packets.push(b); },
+        error: (e) => { packets.error = String(e); },
+    });
+    encoder.configure(CBR);
+    encoder.encode(new AudioData({format: 'f32-planar', sampleRate: 48000, numberOfFrames: pcm.length,
+        numberOfChannels: 1, timestamp: 0, data: pcm}));
+    await encoder.flush();
+    encoder.close();
+    return packets;
+}
+
+const base64 = (b) => btoa(String.fromCharCode(...b));
+
+(async () => {
+    const out = {ua: navigator.userAgent};
+    const support = await AudioEncoder.isConfigSupported(CBR);
+    out.supported = support.supported;
+    out.bitrateMode = support.config && support.config.bitrateMode;
+
+    out.counts = {};
+    for (const seconds of [0.25, 1, 5.99, 6]) {
+        const p = await encode(signal('tone', seconds, 0.15));
+        const lengths = p.map((x) => x.length);
+        out.counts[seconds] = {count: p.length, min: Math.min(...lengths), max: Math.max(...lengths)};
+    }
+
+    // Expected at the server (§7.8): the first four pass, "loud" is too_loud, "quiet" is silent.
+    out.fixtures = {};
+    for (const [name, kind, seconds, amplitude] of [
+        ['tone1s', 'tone', 1, 0.15],      // -20.2 LUFS before encoding
+        ['noise2s', 'noise', 2, 0.15],    // -21.1
+        ['blip', 'tone', 0.25, 0.15],
+        ['full6s', 'noise', 6, 0.15],     // must be 301 packets
+        ['loud', 'tone', 1, 0.9],         // -4.6
+        ['quiet', 'tone', 1, 0.0005],     // -69.7
+    ]) {
+        out.fixtures[name] = (await encode(signal(kind, seconds, amplitude))).map(base64);
+    }
+
+    window.__probe = out;
+    document.getElementById('out').textContent = JSON.stringify({counts: out.counts,
+        supported: out.supported, bitrateMode: out.bitrateMode}, null, 1);
+})().catch((e) => {
+    window.__probe = {error: String(e)};
+    document.getElementById('out').textContent = 'ERR ' + e;
+});
+</script>

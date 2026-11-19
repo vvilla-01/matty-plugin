@@ -1,0 +1,17 @@
+# Build outputs (make dist-linux, make lab, go build)
+dist/
+server/dist/
+/server/server
+webapp/dist/
+webapp/lab/dist/
+
+# The stand-in Broadcast Box for local development (make fakebb, make fakebb-media)
+build/fakebb/fakebb
+build/fakebb/media/
+
+# Dependencies
+webapp/node_modules/
+
+# Go test binaries and local tool state
+*.test
+.claude/

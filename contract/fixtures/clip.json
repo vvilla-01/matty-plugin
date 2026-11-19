@@ -1,0 +1,35 @@
+{
+  "id": "00000000000000a1",
+  "title": "clip 00000000000000a1",
+  "createdAt": 1790971200000,
+  "expiresAt": 1793563200000,
+  "startAt": 1790971140000,
+  "durationMs": 10000,
+  "width": 320,
+  "height": 180,
+  "codecs": "avc1.64000d,opus",
+  "bytes": 106940,
+  "thumb": "c2c26490",
+  "clipper": {
+    "userId": "uid-bob",
+    "username": "bob",
+    "displayName": "Bob",
+    "name": "Bob"
+  },
+  "streamer": {
+    "userId": "uid-dave",
+    "username": "dave",
+    "displayName": "Dave",
+    "name": "Dave"
+  },
+  "upvotes": 2,
+  "voted": true,
+  "mine": false,
+  "ofMyStream": false,
+  "canVote": true,
+  "canDelete": false,
+  "canReport": true,
+  "canShare": true,
+  "reported": false,
+  "canDownload": false
+}

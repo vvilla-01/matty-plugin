@@ -1,0 +1,5 @@
+{
+  "error": "Too many tries. Wait a few minutes, then try again.",
+  "code": "rate_limited",
+  "retryAfterMs": 180000
+}

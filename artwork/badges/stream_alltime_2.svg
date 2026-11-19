@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<path d="M18 30L40 48L64 14L88 48L110 30L104 105Q103 115 94 115H34Q25 115 24 105Z" fill="#C7CFD9" stroke="#FAF7EF" stroke-width="14" stroke-linejoin="round"/>
+<path d="M18 30L40 48L64 14L88 48L110 30L104 105Q103 115 94 115H34Q25 115 24 105Z" fill="#C7CFD9" stroke="#102338" stroke-width="6" stroke-linejoin="round"/>
+<text x="64" y="104" text-anchor="middle" font-family="Liberation Sans" font-weight="bold" font-size="70" fill="#102338">2</text>
+</svg>

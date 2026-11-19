@@ -1,0 +1,6 @@
+{
+  "state": "failing",
+  "host": "push.example.net",
+  "kind": "unreachable",
+  "since": 1791230401000
+}
