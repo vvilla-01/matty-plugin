@@ -10,6 +10,7 @@ import {AdminChannelPictures} from './components/AdminChannelPictures';
 import {AdminClips} from './components/AdminClips';
 import {AdminMediaCache} from './components/AdminMediaCache';
 import {AdminPush} from './components/AdminPush';
+import {AdminVoice} from './components/AdminVoice';
 import {AdminSettingsBackup} from './components/AdminSettingsBackup';
 import {AdminSounds} from './components/AdminSounds';
 import {AdminStills} from './components/AdminStills';
@@ -46,6 +47,10 @@ export const ADMIN_SETTINGS: AdminSetting[] = [
     // Push notifications: whether pushes can go out, and how many phones get
     // them, by push server, never by person. Read-only.
     {key: 'pushstatus', component: AdminPush, showTitle: true},
+
+    // Talking from Matty: the voice port, the addresses phones are given,
+    // and how many people talk from the app now, never who. Read-only.
+    {key: 'voicetalkstatus', component: AdminVoice, showTitle: true},
 
     // Recorded airtime: what is stored, taking a copy out, putting one back.
     {key: 'airtimetools', component: AdminAirtime, showTitle: true},

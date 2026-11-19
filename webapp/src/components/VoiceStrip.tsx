@@ -1,55 +1,97 @@
 import React from 'react';
 
 import {useIdentity} from '../identity';
-import type {VoicePerson} from '../types';
+import type {Voice, VoicePerson} from '../types';
+import {voiceGroups, voiceMark, voicePersonLabel} from '../voice';
 
-import {HeadphonesIcon} from './icons';
+import {HeadphonesIcon, HeadphonesOffIcon, MicOffIcon} from './icons';
 
 type Props = {
-    people?: VoicePerson[];
-    connected?: boolean;
+    voice?: Voice;
 };
 
-// Who is in voice, as one row at the top of the panel.
+// Who is in voice, at the top of the panel: each voice channel somebody is
+// in, in the voice server's own order, with the channel's name over the
+// people in it. Channels nobody is in are left out.
 //
 // It renders NOTHING when nobody is in there — the same rule the Up next rail
-// follows, and the reason this is a row rather than a section: on the evenings
-// when voice is empty it costs nothing at all, and on the evenings it is not,
-// the names are already on screen without anybody opening anything.
-//
-// There is one voice channel, so there is no tree to draw and no popout worth
-// having: the roster is a flat list of names, and a list of names is a line of
-// text.
-export const VoiceStrip: React.FC<Props> = ({people, connected}) => {
+// follows: on the evenings when voice is empty it costs nothing at all, and on
+// the evenings it is not, the names are already on screen without anybody
+// opening anything. A server before 4.3.0 sends no channels, and its people
+// are one line of names with no channel over them.
+export const VoiceStrip: React.FC<Props> = ({voice}) => {
     const me = useIdentity();
 
     // Not connected is not the same as nobody being in there, and the panel
     // says neither: it simply does not claim to know. An admin is told what
     // went wrong through /api/v1/me, where nobody else can see it.
-    if (!connected || !people || people.length === 0) {
+    const groups = voiceGroups(voice);
+    if (groups.length === 0) {
         return null;
     }
 
+    const person = (who: VoicePerson) => {
+        const mark = voiceMark(who);
+
+        return (
+            <li
+                key={who.session === undefined ? who.name : `${who.session}`}
+                className='vntv-voice-person'
+                data-me={Boolean(me?.userId) && who.userId === me?.userId}
+                data-muted={Boolean(who.muted)}
+                title={voicePersonLabel(who)}
+            >
+                {who.name}
+                {mark !== '' && (
+                    <span
+                        className='vntv-voice-mark'
+                        aria-hidden={true}
+                    >{mark === 'deaf' ? <HeadphonesOffIcon/> : <MicOffIcon/>}</span>
+                )}
+                {mark !== '' && <span className='vntv-sr-only'>{mark === 'deaf' ? ', deafened' : ', muted'}</span>}
+            </li>
+        );
+    };
+
+    const flat = groups.length === 1 && !groups[0].channel;
+
     return (
-        <div className='vntv-voice'>
+        <div
+            className='vntv-voice'
+            data-channels={!flat}
+        >
             <span
                 className='vntv-voice-icon'
                 aria-hidden={true}
             ><HeadphonesIcon/></span>
-            <ul
-                className='vntv-voice-list'
-                aria-label='In voice'
-            >
-                {people.map((person) => (
-                    <li
-                        key={person.name}
-                        className='vntv-voice-person'
-                        data-me={Boolean(me?.userId) && person.userId === me?.userId}
-                        data-muted={Boolean(person.muted)}
-                        title={person.muted ? `${person.name} — muted` : person.name}
-                    >{person.name}</li>
-                ))}
-            </ul>
+            {flat ? (
+                <ul
+                    className='vntv-voice-list'
+                    aria-label='In voice'
+                >
+                    {groups[0].people.map(person)}
+                </ul>
+            ) : (
+                <ul
+                    className='vntv-voice-channels'
+                    aria-label='In voice'
+                >
+                    {groups.map((group) => (
+                        <li
+                            key={group.channel ? `c${group.channel.id}` : 'elsewhere'}
+                            className='vntv-voice-channel'
+                        >
+                            {group.channel && <span className='vntv-voice-channel-name'>{group.channel.name}</span>}
+                            <ul
+                                className='vntv-voice-list'
+                                aria-label={group.channel ? `In ${group.channel.name}` : 'In voice'}
+                            >
+                                {group.people.map(person)}
+                            </ul>
+                        </li>
+                    ))}
+                </ul>
+            )}
         </div>
     );
 };

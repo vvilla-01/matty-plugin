@@ -125,14 +125,34 @@ export type MonthMedals = {
     bronze?: string[];
 };
 
+// One person connected to the voice server (contract/README.md, "Voice").
+// session, channel, deaf and phone come from 4.3.0; channel absent is the
+// root, 0.
 export type VoicePerson = {
+    session?: number;
     name: string;
     userId?: string;
+    channel?: number;
     muted?: boolean;
+    deaf?: boolean;
+    phone?: boolean;
+};
+
+// One channel of the voice server's tree, from 4.3.0. The root is id 0 and
+// has no parent; max only where the channel has a limit of its own.
+export type VoiceChannel = {
+    id: number;
+    name: string;
+    parent?: number;
+    depth: number;
+    max?: number;
 };
 
 export type Voice = {
     connected: boolean;
+
+    // In the order to draw them: a channel before the ones under it.
+    channels?: VoiceChannel[];
     people?: VoicePerson[];
 };
 
@@ -651,6 +671,10 @@ export type Me = {
     // which name where in the System Console Mattermost's own are switched
     // on.
     pushAlert?: string;
+
+    // System admins only, from 4.3.0: talking from Matty is switched on
+    // here and its voice port is down, in the server's words.
+    voiceTalkAlert?: string;
 };
 
 // The two services connected the 3.4.0 way, through one core on the server

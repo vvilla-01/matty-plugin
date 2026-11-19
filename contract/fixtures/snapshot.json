@@ -133,22 +133,63 @@
   ],
   "voice": {
     "connected": true,
+    "channels": [
+      {
+        "id": 0,
+        "name": "Test",
+        "depth": 0
+      },
+      {
+        "id": 2,
+        "name": "Gaming",
+        "parent": 0,
+        "depth": 1
+      },
+      {
+        "id": 4,
+        "name": "Duo",
+        "parent": 2,
+        "depth": 2,
+        "max": 2
+      },
+      {
+        "id": 1,
+        "name": "Lobby",
+        "parent": 0,
+        "depth": 1
+      },
+      {
+        "id": 3,
+        "name": "AFK",
+        "parent": 0,
+        "depth": 1
+      }
+    ],
     "people": [
       {
-        "name": "Dave",
-        "userId": "u-dave",
-        "muted": true
-      },
-      {
-        "name": "Dave (phone)",
-        "userId": "u-dave"
-      },
-      {
+        "session": 5,
         "name": "Bob",
         "userId": "u-bob",
+        "channel": 2,
+        "muted": true,
+        "deaf": true
+      },
+      {
+        "session": 3,
+        "name": "Dave",
+        "userId": "u-dave",
+        "channel": 1,
         "muted": true
       },
       {
+        "session": 12,
+        "name": "dave (Matty)",
+        "userId": "u-dave",
+        "channel": 1,
+        "phone": true
+      },
+      {
+        "session": 7,
         "name": "Guest"
       }
     ]

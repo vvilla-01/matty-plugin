@@ -208,11 +208,15 @@ func TestContractSnapshot(t *testing.T) {
 	shown.Schedule = append([]scheduleItem(nil), shown.Schedule...)
 	shown.Schedule[0].ID, shown.Schedule[0].StartsAt = "00000000000000d4", 1790946000000
 
-	shown.Voice = &voiceView{Connected: true, People: []voicePerson{
-		{Name: "Dave", UserID: "u-dave", Muted: true},
-		{Name: "Dave (phone)", UserID: "u-dave"},
-		{Name: "Bob", UserID: "u-bob", Muted: true},
-		{Name: "Guest"},
+	// Voice: the rig's channel tree, read as the roster connection reads
+	// it, and four people in it. Bob is deafened in Gaming; Dave is in the
+	// Lobby twice, muted on a desktop and talking from Matty, as the account
+	// that joined; a guest nobody could match sits in the root.
+	shown.Voice = &voiceView{Connected: true, Channels: voiceChannelsOf(voiceTreeClient()), People: []voicePerson{
+		{Session: 5, Name: "Bob", UserID: "u-bob", Channel: 2, Muted: true, Deaf: true},
+		{Session: 3, Name: "Dave", UserID: "u-dave", Channel: 1, Muted: true},
+		{Session: 12, Name: "dave (Matty)", UserID: "u-dave", Channel: 1, Phone: true},
+		{Session: 7, Name: "Guest"},
 	}}
 
 	// On top of the scene's airtime boards, what its settings leave off: the
@@ -335,6 +339,16 @@ func TestContractMeAndAccess(t *testing.T) {
 	access := s.serve(http.MethodGet, "/api/v1/access", sceneLetIn, "", nil)
 	require.Equal(t, http.StatusOK, access.Code)
 	contractFixture(t, "access.json", access.Body.Bytes())
+
+	// From 4.3.0, with voice on: whether a Matty may talk, and why not.
+	quiet := s.p.getConfiguration()
+	voiceOn := quiet.Clone()
+	voiceOn.EnableVoice, voiceOn.MumbleServer = true, "mumble.example.com"
+	s.p.setConfiguration(voiceOn)
+	voice := s.serve(http.MethodGet, "/api/v1/access", sceneLetIn, "", nil)
+	require.Equal(t, http.StatusOK, voice.Code)
+	contractFixture(t, "access-voice.json", voice.Body.Bytes())
+	s.p.setConfiguration(quiet)
 
 	// Whether this is a signed release: as the tests run, never, since they
 	// run from no release folder (release_check_test.go has the other two).

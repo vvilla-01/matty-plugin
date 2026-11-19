@@ -220,6 +220,10 @@ type meResponse struct {
 	// Admin-only, from 4.1.0: push notifications are switched on here and
 	// Mattermost decides to push to nobody, and why. See push.go.
 	PushAlert string `json:"pushAlert,omitempty"`
+
+	// Admin-only, from 4.3.0: talking from Matty is switched on and its
+	// voice port is down, and why. See voice_api.go.
+	VoiceTalkAlert string `json:"voiceTalkAlert,omitempty"`
 }
 
 type profileResponse struct {
@@ -659,6 +663,41 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		}
 		p.handleSoundAudio(w, r, userID)
 
+	// Talking from Matty: see voice_api.go. Joining is metered in its
+	// handler, after the checks a refusal should not spend a try on; leaving
+	// is never metered or refused.
+	case "/api/v1/voice/join":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "Method not allowed.")
+			return
+		}
+		p.handleVoiceJoin(c, w, r, userID)
+
+	case "/api/v1/voice/move":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "Method not allowed.")
+			return
+		}
+		p.handleVoiceMove(w, r, userID)
+
+	case "/api/v1/voice/state":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "Method not allowed.")
+			return
+		}
+		p.handleVoiceState(w, r, userID)
+
+	case "/api/v1/voice/leave":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "Method not allowed.")
+			return
+		}
+		p.handleVoiceLeave(w, r, userID)
+
+	// How talking from Matty stands, in the System Console.
+	case "/api/v1/admin/voice":
+		p.handleAdminVoice(w, r, userID)
+
 	// Sounds on the server, in the System Console: see sounds_admin.go.
 	case "/api/v1/admin/sounds":
 		p.handleAdminSounds(w, r, userID)
@@ -964,6 +1003,11 @@ type accessResponse struct {
 	// key to register with, or why not (push.go). From 4.1.0. From memory:
 	// no store read.
 	Push pushWord `json:"push"`
+
+	// Whether a Matty may talk in the voice server's channels from here, or
+	// why not (voice.go). From 4.3.0, and only while voice is switched on.
+	// From memory: no store read.
+	Voice *voiceWord `json:"voice,omitempty"`
 }
 
 // handleAccess answers GET /api/v1/access: the caller's access, and which
@@ -988,6 +1032,7 @@ func (p *Plugin) handleAccess(w http.ResponseWriter, userID, sessionID string) {
 		Release:    p.releaseWordNow(),
 		App:        p.appWordFor(sessionID, userID, cfg),
 		Push:       p.pushWordNow(cfg),
+		Voice:      p.voiceWordNow(cfg),
 	}
 
 	// A store that did not answer is "unknown", never a guess, as on /me: a
@@ -1090,6 +1135,7 @@ func (p *Plugin) handleMeIn(w http.ResponseWriter, userID, sessionID string) {
 		response.LedgerAlert = p.ledgerAlertFor()
 		response.ReleaseAlert = p.releaseAlertNow()
 		response.PushAlert = p.pushAlertFor(cfg)
+		response.VoiceTalkAlert = p.voiceTalkAlertFor(cfg)
 	}
 
 	writeJSON(w, http.StatusOK, response)

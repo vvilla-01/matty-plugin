@@ -1,0 +1,4 @@
+{
+  "error": "The voice server did not let you into that channel.",
+  "code": "voice_denied"
+}

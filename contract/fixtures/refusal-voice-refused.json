@@ -1,0 +1,4 @@
+{
+  "error": "The voice server refused the password this server has for it.",
+  "code": "voice_refused"
+}

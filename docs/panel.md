@@ -975,6 +975,15 @@ focus in the row rather than focus that has moved on. These are two placements i
 CSS `order`, because they are different positions in the reading order and a screen reader follows
 the DOM.
 
+### The voice row
+
+The voice row is read only: it shows who is on the Mumble server, by channel (see
+[Who is in voice](voice.md#who-is-in-voice)), and nobody joins or talks from the panel. Somebody
+talking from the Matty app is listed under their Mattermost name, not the name the plugin gave them
+on Mumble, and muted or deafened as they are there. While talking from Matty is switched on and its
+voice port is down, system admins see why among the panel's alerts, with where in the System Console
+to put it right: the Talking from Matty card at the end of the Mumble section.
+
 ### Rows that open and close
 
 The voice strip comes and goes on its own — somebody joins Mumble — and so do the sheets that rise

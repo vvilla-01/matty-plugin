@@ -62,8 +62,22 @@ What that produced, beyond the fixes themselves:
     phone's secret, send pushes it shows), so neither is ever logged, part of a key's name, in a
     refusal or on the System Console's card, and an error from the client never carries them: logs name the push server's host, the status and
     a fixed word for what went wrong.
+- **Talking from Matty is the server's, and passes voice on without keeping it.** Off unless an
+  admin switches it on. Joining, moving and muting are for people who are linked or let in, and are
+  refused to everybody else at the gate; leaving is a takeback, open to anybody. Every voice route is
+  answered only to a request carrying `X-Requested-With: XMLHttpRequest`, so a picture or a link in
+  a post can do nothing with it; joins are held to 6 a minute a person and 50 people at once. A
+  session ends when the person's access goes, and when the Mattermost session they joined from
+  signs out, each looked at once a minute. The phone's voice reaches the server over DTLS-SRTP, on
+  the one UDP port, and goes on to Mumble over TLS; the server reads only each packet's audio level
+  and the first bytes that say how long it plays, and never decodes, records or keeps the sound. A
+  person's voice goes up only while they are talking by that level, and never while they, or a
+  Mumble admin, have muted them. The name a person has on the Mumble server is chosen by the server
+  from their Mattermost username, never by the phone, and is never the plugin's own connection's
+  name, one of the names left out, or another phone session's on this server. See
+  [Talking from Matty](voice.md#talking-from-matty).
 - **What the server contacts besides Broadcast Box**, each only when an admin has switched it on:
-  the Mumble server (voice and the chat bridge); TMDB, the Steam store and IGDB (title lookups);
+  the Mumble server (voice, talking from Matty and the chat bridge); TMDB, the Steam store and IGDB (title lookups);
   Twitch (`id.twitch.tv`, `api.twitch.tv` and `static-cdn.jtvnw.net`, for Twitch live); Steam
   (`steamcommunity.com` and `api.steampowered.com`, for Steam status); Hytale
   (`connect.accounts.hytale.com`, for Hytale names); and the UnifiedPush push servers people's
@@ -390,9 +404,9 @@ one that travels with a release), and finds one of three things:
   look: System Console > Plugins > Matty > App check.
 
 The App check section of the System Console starts with a line on this: **This plugin** says "This
-plugin is a signed release of Matty Plugin 4.2.0.", "This plugin is not a signed release: a
-development build, or somebody’s own build of Matty Plugin 4.2.0." or, as an error, "This plugin’s
-files are altered. They are not as the signed release of Matty Plugin 4.2.0 has them:" and why.
+plugin is a signed release of Matty Plugin 4.3.0.", "This plugin is not a signed release: a
+development build, or somebody’s own build of Matty Plugin 4.3.0." or, as an error, "This plugin’s
+files are altered. They are not as the signed release of Matty Plugin 4.3.0 has them:" and why.
 Under it is the SHA-256 of the manifest the server sent, worked out in the browser, to compare with
 the one published with the release, and, for a release that is signed or altered, what the check
 does and does not show.
@@ -401,7 +415,7 @@ The plugin runs in every state. Any signed-in reader can ask for the manifest an
 (`GET /api/v1/release`), and **Matty checks them itself**, against its own copies of the two
 certificates, with the phone's own cryptography: both signatures first, then the manifest, whose
 version must be the one the server reports. It shows the result where it lists the plugin: "Matty
-Plugin 4.2.0 · signed release (RSA + ML-DSA)", "· not a signed release", or "· release not
+Plugin 4.3.0 · signed release (RSA + ML-DSA)", "· not a signed release", or "· release not
 verified:" and why. A phone that cannot verify ML-DSA-87 reads "not verified", never "signed" on the
 RSA signature alone. An unsigned or unverified release goes on working, in the app as in the panel.
 
@@ -444,8 +458,8 @@ derives it again from its own Site URL and the session's user, and passes the ap
 **Check the Matty app** is **Off**, **Check, and show the result** (the default: the person and the
 admins are told what was found, and nothing is refused), or **Check, and refuse a Matty that fails**.
 With refusing on, a request that says it is Matty (by its User-Agent) from a session that has not
-passed is answered `403` on every route but the few its lock screen needs and taking its own push
-registration back (`DELETE /me/push`), with the reason: "Matty answers only the official Matty app,
+passed is answered `403` on every route but the few its lock screen needs, taking its own push
+registration back (`DELETE /me/push`) and leaving voice (`POST /voice/leave`), with the reason: "Matty answers only the official Matty app,
 and this copy has not been checked yet.", "… has to be checked again: this server's rules for the
 check have changed." or "… did not pass the check." and why (a server with a name of its own says
 that name first). The web panel is never refused by it.
@@ -548,6 +562,11 @@ What it shows, and what it cannot:
   bitrate (not Firefox on Android); playing one works anywhere. One Mattermost server only: in a
   cluster, a press reaching a node without the Mumble connection is refused. A Murmur that has fallen
   back to CELT drops the sounds. See [Setting the soundboard up](voice.md#setting-the-soundboard-up).
+- **Talking from Matty has met no real phone on a real network here.** It is built on what WebRTC
+  and Mumble's own sources say and tested with a WebRTC peer standing in for the phone against a
+  stand-in Mumble server. One Mattermost server only: in a cluster it stays off. Four voices at
+  once reach a phone; a phone behind a network that blocks UDP cannot talk, since there is no TURN
+  or TCP fallback. See [Talking from Matty](voice.md#talking-from-matty).
 - **A tile left open earns hours**, for biggest fans and the 24/7 channel achievements as for Top
   Snoopers; the panel disconnects tiles nobody can see after a minute.
 - **Live viewers may lose the sound after an OBS reconnect.** Found while Clips was designed: after a

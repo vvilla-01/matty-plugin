@@ -3,6 +3,7 @@ import React from 'react';
 import {formatDuration} from '../format';
 import {PRODUCT_NAME} from '../name';
 import {PUSH_SECTION, pushAlertText} from '../pushAdmin';
+import {VOICE_SECTION, voiceTalkAlertText} from '../voiceAdmin';
 import {dayDate, viewerZone} from '../time';
 import type {LedgerAlert, Me, ReleaseAlert} from '../types';
 
@@ -15,7 +16,7 @@ import type {LedgerAlert, Me, ReleaseAlert} from '../types';
 function hasAdminAlerts(me: Me | null): boolean {
     return Boolean(me?.isAdmin && (me.letInAlert || me.voiceAlert || me.birthdayAlert || me.airtimeAlert || me.clipsAlert || me.twitch?.problem ||
         me.steam?.problem || me.hytale?.problem || me.soundAlert || me.achievementsAlert || ledgerLines(me.ledgerAlert).length > 0 ||
-        releaseLines(me.releaseAlert) || pushAlertText(me.pushAlert)));
+        releaseLines(me.releaseAlert) || pushAlertText(me.pushAlert) || voiceTalkAlertText(me.voiceTalkAlert)));
 }
 
 // Where in the System Console something is put right: the plugin's page,
@@ -82,6 +83,7 @@ export const AdminAlerts: React.FC<{me: Me | null}> = ({me}) => {
 
     const release = releaseLines(me.releaseAlert);
     const push = pushAlertText(me.pushAlert);
+    const voiceTalk = voiceTalkAlertText(me.voiceTalkAlert);
 
     return (
         <>
@@ -123,6 +125,16 @@ export const AdminAlerts: React.FC<{me: Me | null}> = ({me}) => {
                     {sentence(me.letInAlert)}
                     {' Only you can see this. Look in '}
                     <b>{consolePath('Access')}</b>{'.'}
+                </div>
+            )}
+
+            {/* Talking from Matty is switched on and its voice port is down:
+                the port, the addresses or a cluster, in the server's words. */}
+            {voiceTalk && (
+                <div className='vntv-notice vntv-notice-error'>
+                    {voiceTalk}
+                    {' Only you can see this. Put it right in '}
+                    <b>{consolePath(VOICE_SECTION)}</b>{'.'}
                 </div>
             )}
 

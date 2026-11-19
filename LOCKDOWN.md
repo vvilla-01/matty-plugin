@@ -248,6 +248,25 @@ presser's own channel. Each play is logged with the Mattermost account and the s
 sounds themselves are kept in the plugin's key-value store (`sounds` and one `sound_` key each, at
 most 40 KB a sound), never on disk.
 
+**Talking from Matty, off unless an admin switches on "Let people talk from Matty".** Then:
+
+- **The Mattermost server listens on one UDP port**, **Voice port (UDP)** (8445 unless changed), on
+  every interface, IPv4 only. It is the one port the plugin itself listens on. Phones send their
+  voice there over WebRTC (ICE, then DTLS-SRTP), and it answers only connections that a join made:
+  `POST /api/v1/voice/join`, through Mattermost with the person's own session, for people who are
+  linked or let in. Open it to the phones that should be able to talk, UDP only. Nothing else needs
+  opening: there is no STUN or TURN server, and the server gives phones only the addresses in
+  **Address for phones** (or the Site URL's host) on that port.
+- **Towards the Mumble server, one more client connection for each person talking**, from the
+  Mattermost server's address, as the roster connection is made (TLS, the certificate not checked,
+  **Server password**). What goes there: the name `<username> (Matty)`, the person's voice as their
+  phone encoded it (Opus, inside the TLS connection), their own mute and deafen, and their moves
+  between channels. No Mattermost credential and no stream key. The voice is passed on as it is:
+  never decoded, recorded or kept, here or on the disk. At most 8 such connections are opened in
+  any two minutes, the roster connection's included, below Mumble's autoban, unless an admin says
+  the autoban is off.
+- **In a Mattermost cluster it stays off**, and so does the port.
+
 **The title search** is `POST /api/v1/media/search`, with what to look for in its body. Nothing that
 merely loads an address makes a POST, and on a browser's session Mattermost checks its CSRF token,
 so a Markdown image in a post cannot make readers' browsers search the providers in their name. For

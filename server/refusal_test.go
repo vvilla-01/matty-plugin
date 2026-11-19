@@ -295,6 +295,10 @@ func TestEveryMetersRefusalIsWrittenWithItsWait(t *testing.T) {
 		regexp.MustCompile(`writeJSON\(w, http\.StatusTooManyRequests, (errorResponse|clipErrorResponse)\{`),
 		regexp.MustCompile(`writeSoundRefusal\(w, http\.StatusTooManyRequests, soundCodeRateLimited, .*\.wait\(`),
 
+		// A person's share of voice's budget: the refusal carries its wait,
+		// which voiceRefusal.write writes as retryAfterMs.
+		regexp.MustCompile(`&voiceRefusal\{Status: http\.StatusTooManyRequests, Code: codeRateLimited, .*RetryAfter: wait\}`),
+
 		// A status looked at, mapped or handed on, never written here.
 		regexp.MustCompile(`case http\.StatusTooManyRequests:`),
 		regexp.MustCompile(`== http\.StatusTooManyRequests`),

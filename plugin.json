@@ -5,7 +5,7 @@
     "homepage_url": "https://github.com/vvilla-01/matty-plugin",
     "support_url": "https://github.com/vvilla-01/matty-plugin/issues",
     "icon_path": "assets/icon.svg",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "min_server_version": "11.11.0",
     "server": {
         "executables": {
@@ -756,7 +756,7 @@
             {
                 "key": "voice",
                 "title": "Mumble",
-                "subtitle": "Who is in voice, over one connection. Matty never joins a channel, and hears nobody.",
+                "subtitle": "Who is in voice, over one connection, and talking from Matty, with a Mumble connection for each person who joins from the app.",
                 "settings": [
                     {
                         "key": "EnableVoice",
@@ -811,6 +811,41 @@
                         "help_text": "One per line, as `mumbleName = mattermostUsername`, for people whose two names are not the same.",
                         "placeholder": "alice_ = alice",
                         "default": ""
+                    },
+                    {
+                        "key": "EnableVoiceTalk",
+                        "display_name": "Let people talk from Matty",
+                        "type": "bool",
+                        "help_text": "Lets people who may watch join the Mumble server's channels from the Matty app and talk there. Each phone sends its voice to this server and hears the channel from it, and this server gives each person a Mumble connection of their own, named after their Mattermost username with \" (Matty)\" after it. The voice is passed on as it is: never decoded, recorded or kept. It works on a single Mattermost server only, not in a cluster.\n**Outside services:** the Mumble server above, with one more connection for each person talking from Matty, from this server's address and with the server password above. Phones connect to this server only.\n**Needs:** **Show who is in voice** on and connected; the UDP port below open to phones; and the address phones reach this server at.\n**Kept:** nothing. Who is talking from Matty, and in which channel, is held in memory while they are there. Off by default.",
+                        "default": false
+                    },
+                    {
+                        "key": "VoiceTalkPort",
+                        "display_name": "Voice port (UDP)",
+                        "type": "number",
+                        "help_text": "1024 to 65535. The one UDP port every phone's voice reaches this server on: open it to phones in the firewall, for UDP. Changing it drops every phone for a moment, and each joins again by itself.",
+                        "default": 8445
+                    },
+                    {
+                        "key": "VoiceTalkAddress",
+                        "display_name": "Address for phones",
+                        "type": "longtext",
+                        "help_text": "Where phones reach this server, as an IPv4 address or a host name, one a line: what each phone is told to send its voice to, on the port above. Blank: the host of Mattermost's Site URL. A host name is looked up when talking starts and again every ten minutes. IPv6 is not used.",
+                        "placeholder": "203.0.113.7",
+                        "default": ""
+                    },
+                    {
+                        "key": "VoiceTalkNoBudget",
+                        "display_name": "The voice server's autoban is off",
+                        "type": "bool",
+                        "help_text": "By default a Mumble server bans an address for five minutes after 10 connections from it in two minutes, and every phone connects to it from this server's address. So Matty opens at most 8 connections to the voice server in any two minutes, and asks anybody who joins past that to wait a moment. Switch this on only once the voice server no longer bans for that, in its own settings file: `autobanSuccessfulConnections=false` stops it counting the connections that succeed, and `autobanAttempts=0` switches the autoban off. Off by default.",
+                        "default": false
+                    },
+                    {
+                        "key": "VoiceTalkStatus",
+                        "display_name": "Talking from Matty",
+                        "type": "custom",
+                        "help_text": "Whether the voice port is open, the addresses phones are given, whether the voice server is connected, how many people are talking from Matty now, and the voice server's last refusal of one of them. Read from the server each time this page opens, or with Refresh."
                     }
                 ]
             },

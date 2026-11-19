@@ -23,6 +23,7 @@ import type {
     ScheduleItem,
     Snapshot,
     Stream,
+    VoiceChannel,
     VoicePerson,
 } from '../src/types';
 import {clipTime, tagKindOf, tagTitleOf} from '../src/clipLogic';
@@ -35,6 +36,15 @@ import type {AdminPush, MediaCacheStatus} from '../src/client';
 import {detailsOf} from './media';
 import type {ReleaseAlert, ReleaseAnswer} from '../src/types';
 import {PLUGIN_ID} from './mocks/manifest';
+
+// The lab's voice server: Lounge (the root), Gaming under it with Duo, which
+// takes two, under that, and AFK last.
+export const LAB_VOICE_CHANNELS: VoiceChannel[] = [
+    {id: 0, name: 'Lounge', depth: 0},
+    {id: 1, name: 'Gaming', parent: 0, depth: 1},
+    {id: 2, name: 'Duo', parent: 1, depth: 2, max: 2},
+    {id: 3, name: 'AFK', parent: 0, depth: 1},
+];
 
 // The lab's fake server.
 //
@@ -86,6 +96,11 @@ export type World = {
     // there, and connected false means the panel is not in a position to say.
     voiceConnected: boolean;
     voice: VoicePerson[];
+
+    // The voice server's channels, in the order the server sends them (a
+    // channel before the ones under it). Empty is a server before 4.3.0,
+    // which sends none.
+    voiceChannels: VoiceChannel[];
 
     // The "Live preview pictures" setting.
     livePreviews: boolean;
@@ -877,10 +892,11 @@ function starting(): World {
         failWrites: false,
         voiceConnected: true,
         voice: [
-            {name: 'Victor', userId: ME_ID},
-            {name: 'Dave', userId: 'u-dave'},
-            {name: 'Bob', userId: 'u-bob', muted: true},
+            {session: 2, name: 'Victor', userId: ME_ID},
+            {session: 3, name: 'Dave', userId: 'u-dave'},
+            {session: 4, name: 'Bob', userId: 'u-bob', channel: 1, muted: true, deaf: true},
         ],
+        voiceChannels: LAB_VOICE_CHANNELS,
         livePreviews: true,
         nowPlaying: sampleNowPlaying(),
         tagSearch: 'messages',
@@ -2629,7 +2645,11 @@ export function snapshotOf(): Snapshot {
         }),
         boards: {version: boardsOf().version},
         schedule,
-        voice: {connected: world.voiceConnected, people: world.voice},
+        voice: {
+            connected: world.voiceConnected,
+            channels: world.voiceConnected && world.voiceChannels.length > 0 ? world.voiceChannels : undefined,
+            people: world.voiceConnected && world.voice.length > 0 ? world.voice : undefined,
+        },
         people,
         fetchedAt: Date.now(),
         configured: world.configured,

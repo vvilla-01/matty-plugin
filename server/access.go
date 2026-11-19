@@ -548,6 +548,15 @@ var routeClasses = map[string]map[string]routeClass{
 	"/api/v1/sounds/remove-mine": {http.MethodPost: routeOpen},
 	"/api/v1/sounds/play":        {http.MethodPost: routeLinked},
 	"/api/v1/sounds/audio":       {http.MethodGet: routeLinked},
+
+	// Talking from Matty (voice_api.go) is watching: what the voice server's
+	// channels carry is for people who may see the panel. Leaving is a
+	// takeback, open to everybody, so that somebody let out can still hang
+	// up.
+	"/api/v1/voice/join":  {http.MethodPost: routeWatch},
+	"/api/v1/voice/move":  {http.MethodPost: routeWatch},
+	"/api/v1/voice/state": {http.MethodPost: routeWatch},
+	"/api/v1/voice/leave": {http.MethodPost: routeOpen},
 }
 
 // routeClassOf is a request's class, and whether its path is a route at all.

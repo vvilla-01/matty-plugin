@@ -67,6 +67,10 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 		tweak func(cfg *configuration, client *gumble.Client)
 		code  string
 		in    bool
+
+		// The first person is a phone session of this node's, the
+		// account's that joined from Matty.
+		phoneOf string
 	}{
 		"in, and free to speak": {users: []*gumble.User{{Name: "Craig"}}, code: "", in: true},
 		"not in Mumble":         {users: []*gumble.User{{Name: "Bob"}}, code: soundCodeNotInVoice},
@@ -114,6 +118,24 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 			tweak: func(_ *configuration, client *gumble.Client) { client.Self.Suppressed = true },
 			code:  soundCodeBotCannot, in: true,
 		},
+		"in only from Matty, under the phone's name": {
+			users: []*gumble.User{{Name: "craig (Matty)"}}, phoneOf: "uid-craig",
+			code: "", in: true,
+		},
+		"from Matty, with registered names only, as the voice server reports the session": {
+			users:   []*gumble.User{{Name: "craig (Matty)"}},
+			phoneOf: "uid-craig",
+			tweak:   func(cfg *configuration, _ *gumble.Client) { cfg.SoundsRegisteredOnly = true },
+			code:    soundCodeNotRegistered, in: true,
+		},
+		"somebody else's phone session, whatever its name": {
+			users: []*gumble.User{{Name: "craig"}}, phoneOf: "uid-dave",
+			code: soundCodeNotInVoice,
+		},
+		"in from Matty and from Mumble too": {
+			users: []*gumble.User{{Name: "craig (Matty)"}, {Name: "craig"}}, phoneOf: "uid-craig",
+			code: soundCodeTwoSessions, in: true,
+		},
 		"VillaNET deafened": {
 			users: []*gumble.User{{Name: "craig"}},
 			tweak: func(_ *configuration, client *gumble.Client) { client.Self.SelfDeafened = true },
@@ -126,7 +148,12 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 			row.tweak(&next, client)
 		}
 
-		read := readVoice(client, "craig", &next, perms)
+		presser := voicePresser{userID: "uid-craig", username: "craig", phones: &voicePhoneRegistry{}}
+		if row.phoneOf != "" {
+			presser.phones.put(row.users[0].Session, row.phoneOf)
+		}
+
+		read := readVoice(client, presser, &next, perms)
 		require.Equal(t, row.code, read.code, about)
 		require.Equal(t, row.in, read.in, about)
 		if row.code == "" {
@@ -138,12 +165,12 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 	// Whisper in the presser's channel, when it is known.
 	client, lounge := pressClient(&gumble.User{Name: "craig"})
 	perms.set(func(f *fakePermissions) { f.whisper[lounge.ID] = false })
-	read := readVoice(client, "craig", cfg, perms)
+	read := readVoice(client, voicePresser{username: "craig"}, cfg, perms)
 	require.Equal(t, soundCodeBotCannot, read.code, "no Whisper there")
 	require.True(t, read.whisperKnown)
 
 	perms.set(func(f *fakePermissions) { delete(f.whisper, lounge.ID); f.unknown[lounge.ID] = true })
-	read = readVoice(client, "craig", cfg, perms)
+	read = readVoice(client, voicePresser{username: "craig"}, cfg, perms)
 	require.Empty(t, read.code, "not known yet: the press asks, and waits")
 	require.False(t, read.whisperKnown)
 

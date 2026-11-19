@@ -129,6 +129,17 @@ type configuration struct {
 	PushOnlyListed   bool
 	PushContact      string
 
+	// 4.3.0: talking from Matty (voice_rtc.go, voice_api.go). Whether
+	// people may join the voice server's channels from Matty through this
+	// server; the one UDP port phones reach it on; the addresses phones are
+	// given, one a line, blank for the host of Mattermost's Site URL; and
+	// whether the voice server's autoban is off, so that the plugin's own
+	// budget of connections to it refuses nobody.
+	EnableVoiceTalk   bool
+	VoiceTalkPort     int
+	VoiceTalkAddress  string
+	VoiceTalkNoBudget bool
+
 	// No AccessContact any more. "Who to ask" fed only the lock screen's
 	// line telling people with no token whom to ask to be let in, and in
 	// 3.1.0 the lock stopped saying that anybody can be (Victor: "Don't
@@ -246,6 +257,21 @@ func sameBotIdentity(a, b *configuration) bool {
 	return a.BotUsername == b.BotUsername &&
 		a.BotDisplayName == b.BotDisplayName &&
 		a.BotDescription == b.BotDescription
+}
+
+// sameVoiceTalk reports whether talking from Matty would run the same way:
+// switched on or off, on the same port, giving phones the same addresses,
+// and under the same budget.
+func sameVoiceTalk(a, b *configuration) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return a.EnableVoice == b.EnableVoice &&
+		a.EnableVoiceTalk == b.EnableVoiceTalk &&
+		a.VoiceTalkPort == b.VoiceTalkPort &&
+		a.VoiceTalkAddress == b.VoiceTalkAddress &&
+		a.VoiceTalkNoBudget == b.VoiceTalkNoBudget
 }
 
 func sameMumbleConnection(a, b *configuration) bool {
@@ -422,6 +448,31 @@ func (c *configuration) clipStorageLimitBytes() int64 {
 // text bridge share one, because two would be two users in the channel list.
 func (c *configuration) needsMumble() bool {
 	return (c.EnableVoice || c.EnableChatBridge) && c.MumbleServer != ""
+}
+
+// voiceTalkWanted reports whether talking from Matty is switched on and has
+// a voice server to talk on. Whether it works also takes the listener and
+// the roster connection (voiceWordNow).
+func (c *configuration) voiceTalkWanted() bool {
+	return c.EnableVoice && c.EnableVoiceTalk && c.MumbleServer != ""
+}
+
+// voiceTalkAddresses are the lines of the address setting, trimmed, blank
+// lines and repeats left out.
+func (c *configuration) voiceTalkAddresses() []string {
+	var lines []string
+	seen := map[string]bool{}
+
+	for _, line := range strings.Split(c.VoiceTalkAddress, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || seen[strings.ToLower(line)] {
+			continue
+		}
+		seen[strings.ToLower(line)] = true
+		lines = append(lines, line)
+	}
+
+	return lines
 }
 
 // hiddenVoiceNames are the Mumble names that are furniture rather than people:
@@ -728,6 +779,11 @@ func (c *configuration) normalize() {
 	}
 
 	c.SoundCooldownSeconds = c.soundCooldownSeconds()
+
+	// The voice port is kept as the admin set it, even outside 1024 to
+	// 65535: talk then stays off and says so (voiceTalkPortAllowed), rather
+	// than open a port the firewall was never told about.
+	c.VoiceTalkAddress = strings.Join(c.voiceTalkAddresses(), "\n")
 
 	c.normalizePushSettings()
 

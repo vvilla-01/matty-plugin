@@ -129,6 +129,13 @@ var sectionDefaults = map[string]any{
 	"VoiceMatchUsernames": true,
 	"VoiceNameMap":        "",
 
+	// Talking from Matty. VoiceTalkStatus is a component with no value, so
+	// it has no default.
+	"EnableVoiceTalk":   false,
+	"VoiceTalkPort":     8445,
+	"VoiceTalkAddress":  "",
+	"VoiceTalkNoBudget": false,
+
 	// Soundboard. SoundsAdmin is a component with no value, so it has no
 	// default.
 	"EnableSoundboard":     false,

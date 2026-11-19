@@ -10,27 +10,30 @@ no row while nothing is planned.)
 On the evenings voice is empty it costs nothing; on the evenings it is not, the names are already on
 screen without anybody opening anything.
 
-There is one voice channel, so there is no tree to draw and nothing a popout would add: the roster
-is a flat list of names, and a list of names is a line of text. Your own name is picked out, muted
-people are dimmed rather than hidden, and the row scrolls sideways rather than wrapping — a row that
-grew to three lines on a busy night would push the players down the panel, which is the one thing
-the top of the panel must not do.
+The row is grouped by Mumble channel: each channel somebody is in, in the order Mumble shows its
+channels, with the channel's name over a line of the people in it. Channels nobody is in are left
+out. Your own name is picked out, muted people are dimmed rather than hidden, with a crossed
+microphone after the name, and deafened people have crossed headphones there instead. Each line
+scrolls sideways rather than wrapping, so a busy channel is still one line. The panel only shows
+who is where. Joining a channel and talking there is done from the Matty app, while an admin allows
+it: see [Talking from Matty](#talking-from-matty).
 
 ### How it gets the names
 
-The plugin holds **one Mumble client connection**, using [gumble](https://github.com/layeh/gumble).
-It never joins the voice channel, and it hears nobody: Mumble sends it the audio of anybody who talks
-in the channel where it is parked (usually the root), and it drops that unheard. A Mumble client is
-sent every user connected to the *server*, not only the ones beside it, so with a single voice
-channel the roster is simply everybody who is on.
+The plugin holds **one Mumble client connection** for this, using [gumble](https://github.com/layeh/gumble).
+It never moves from the channel Mumble puts it in, and it hears nobody: Mumble sends it the audio of
+anybody who talks in the channel where it is parked (usually the root), and it drops that unheard. A
+Mumble client is sent every channel and every user connected to the *server*, not only the ones
+beside it, so the roster is the whole channel tree and everybody who is on, wherever they are.
 
 With the soundboard on, it also **sends** audio: the sounds people play, shouted into their own
 channel. See [Soundboard](#soundboard).
 
-This is the plugin's only outbound connection besides Broadcast Box itself — and, only if an admin
-switches them on, the title lookups (TMDB, Steam and IGDB), Twitch live (Twitch), Steam status
-(Steam), Hytale names (Hytale) and UnifiedPush [push notifications](push.md), to the push servers
-people's phones name.
+This connection, and the one more for each person [talking from Matty](#talking-from-matty), to the
+same Mumble server, are the plugin's only outbound connections besides Broadcast Box itself — and,
+only if an admin switches them on, the title lookups (TMDB, Steam and IGDB), Twitch live (Twitch),
+Steam status (Steam), Hytale names (Hytale) and UnifiedPush [push notifications](push.md), to the
+push servers people's phones name.
 
 **Not built on Matterbridge**, which was the obvious idea and does not work. Its Mumble side turns
 arrivals and departures into prose chat messages — *"Alice joined"* — for the one channel it sits
@@ -48,8 +51,9 @@ row on an evening when four people are in there is worse than no row at all.
   published when the plugin is actually connected and in a position to know. When it cannot reach
   Mumble the row simply is not there, and the reason is shown to **system admins only** — everybody
   else would get a warning about a server they can neither reach nor fix.
-- **Mumble is chatty about things the panel does not show** — a comment, a texture. The roster is
-  compared before it is published, so those change nothing and send nothing.
+- **Mumble is chatty about things the panel does not show** — a comment, a texture, a channel's
+  description. The roster is compared before it is published, so those change nothing and send
+  nothing. A channel made, removed, renamed, moved or reordered is a change, and is sent.
 - **A change the panel does show costs no poll.** Somebody joining or leaving, muting or deafening
   (muted people are dimmed), or the connection to Mumble dropping puts the new roster on the stream
   list as it was last sent, and sends that: Broadcast Box is not asked anything and nothing is read
@@ -58,9 +62,14 @@ row on an evening when four people are in there is worse than no row at all.
   Before 3.1.0 each such change cost a whole poll of Broadcast Box.
 - **A map has no order.** The roster is sorted, because an order that changed every poll would
   republish the snapshot for ever.
-- **Talking-right-now is deliberately absent.** Knowing who is speaking means receiving the audio,
+- **Talking-right-now is deliberately absent from the roster.** Knowing who is speaking means
+  receiving the audio,
   which means joining the channel and taking the bandwidth. A name list that changes several times a
-  second is also not a name list anybody can read.
+  second is also not a name list anybody can read. The Matty app shows who is talking only in the
+  channel it is connected to, from its own voice connection.
+- **Somebody here from Matty is their Mattermost account.** A person talking from the app is on the
+  Mumble server under a name the plugin chose for them, `alice (Matty)`, and the roster shows them as
+  the account that joined, with a phone mark, whatever the name rules say.
 
 ### What the connection costs you
 
@@ -77,6 +86,148 @@ decides into which Mumble channel your sounds play. It lets nobody act as anybod
 which is why a name match is good enough here and is emphatically not good enough for stream keys;
 what a name proves, and what it does not, is under
 [What a Mumble name proves](#what-a-mumble-name-proves).
+
+## Talking from Matty
+
+Off unless an admin switches on **Let people talk from Matty** (System Console > Plugins > Matty >
+Mumble). Then the Matty app (0.1.31 and later) lists the Mumble channels in a team's channel list,
+as Discord lists its voice channels, and anybody who may watch can join one, talk, mute, deafen,
+move to another channel and leave. The web panel stays read only.
+
+The phone does not talk to the Mumble server. It opens one WebRTC connection, audio only, to the
+Mattermost server, on one UDP port, and the plugin opens a Mumble connection of that person's own to
+the Mumble server and passes the voice between the two as it is: Opus from the phone goes to Mumble
+as the phone made it, and Opus from Mumble goes to the phone as Mumble sent it. Nothing is decoded,
+mixed, recorded or kept.
+
+### What it needs
+
+- **Show who is in voice**, on and connected: a join is checked against the channels its connection
+  sees, and talk is off while it is not connected.
+- **One UDP port**, **Voice port (UDP)**, 8445 unless you change it, open to phones on the Mattermost
+  server, for UDP. Every phone uses that same port. Behind a router, forward it to the Mattermost
+  server, UDP, with the same number.
+- **The address phones reach this server at**, **Address for phones**: below.
+- **A single Mattermost server.** In a cluster, talk is off, and the app says "Talking from Matty
+  works on a single Mattermost server only." A phone's voice reaches the one node whose address it
+  was given, while its join, moves and leave are requests that any node may be handed, and each
+  node holds only the Mumble connections it made; each node would also need an address and a port
+  of its own.
+
+Talk is on, and the app offers **Join Voice**, while all of that holds; otherwise the app shows who is
+in each channel and no button, and `GET /api/v1/access` says why (see
+[the contract](../contract/README.md#voice)).
+
+### The port and the firewall
+
+The port listens on every interface of the Mattermost server, IPv4 only. With `ufw`:
+
+```sh
+sudo ufw allow 8445/udp
+```
+
+Nothing else needs opening: there is no STUN or TURN server, and the phone needs no port of its own
+open. Changing the port drops every phone for a moment; each one joins again by itself on the new
+one. A port that cannot be opened (another program has it) leaves talk off, and system admins see
+why in the panel and on the **Talking from Matty** card. A port outside 1024 to 65535 is not
+replaced by another: talk stays off with "The voice port must be between 1024 and 65535.", in the
+app, on the card and in the panel. While the port is down, talk is tried again after 30 seconds,
+then twice as long each time, up to every ten minutes.
+
+### The address
+
+**Address for phones** is what each phone is told to send its voice to: one IPv4 address or host
+name a line, all of them given to every phone, which uses whichever answers. Leave it blank and the
+host of Mattermost's **Site URL** is used, unless that is this machine itself (`localhost`,
+`127.0.0.1`), which a phone cannot reach: then talk stays off with "Set the address phones reach
+this server at." A host name is looked up when talking starts and again every ten minutes; while
+talk is up, a look-up that fails keeps the addresses it had, also when talk restarts for another
+setting with **Address for phones** unchanged. IPv6 is not used: an IPv6 address leaves talk off
+with a sentence saying so.
+
+Behind a router, this is the public IPv4 address, or a name for it; on a home network where phones
+are on the same Wi-Fi, the server's LAN address works too, and both can be listed.
+
+### Names on the Mumble server
+
+Each person talking from Matty is on the Mumble server as **their Mattermost username followed by
+" (Matty)"**, such as `alice (Matty)`, so that Mumble's own users can tell who is on a phone. A
+Mumble server whose rule for names does not take spaces or brackets is asked for `alice.matty`
+instead, and once it has taken that, every later join is asked for under the dotted name first,
+until the Mumble settings change or the plugin restarts. A name somebody registered on the Mumble server is told as `The
+name "alice (Matty)" is registered to somebody else on the voice server.`, and the other name is
+tried. A name is never the plugin's own (**Connect as**), one of **Names to leave out**, or another
+phone's on this server, compared without regard to case: Mumble would throw whoever had it first
+off the server. Such a join is refused with a sentence that names the name. The Mumble server's
+own users are not checked: a Mumble user who connects without a certificate under a phone's name
+throws that phone off the server, and a phone joining throws off a Mumble user without a
+certificate who has its name, because that is how the Mumble server treats two connections of one
+name that have no certificate.
+
+These connections have no certificate, so they are never a registered Mumble user, and a channel
+that only lets registered users in (or that needs a certificate) refuses them, with Mumble's reason.
+They go through Mumble's ACLs as anybody unregistered does.
+
+### What the Mumble server sees
+
+For each person talking from Matty: one more client connection from the Mattermost server's address,
+calling itself Matty and Mumble 1.3.0, with **Server password** (the same as the roster connection's),
+over TLS. Voice travels inside that connection (Mumble's "UDP tunnel"), so no UDP is needed towards
+the Mumble server. The person's own mute and deafen are the connection's self mute and self deafen,
+and a Mumble admin can move, mute, kick or ban them as anybody else; the app is told. A phone that
+loses its connection (a tunnel, a lift, a network change) leaves its Mumble connection in place,
+deafened, for 45 seconds, for the phone to come back to; then it goes.
+
+The voice goes up only while the person is talking, as Mumble's own voice activation does: from a
+packet the phone marks as loud enough (its audio level, which the phone measures), until 400 ms
+after the last one, so that a phone in a quiet room does not light up as talking all evening.
+
+### The autoban, and the two ways round it
+
+A Mumble server as it comes bans an address after too many connections from it, as its own settings
+file has it: `autobanAttempts` (10) connections in `autobanTimeframe` (120 seconds) ban the address
+for `autobanTime` (300 seconds), and with `autobanSuccessfulConnections` (true) the connections that
+succeed count as well as those that fail. Every phone connects from the Mattermost server's address,
+so a busy evening would get the plugin banned, roster connection and all.
+
+So Matty opens **at most 8 connections to the Mumble server in any two minutes**, the roster
+connection's included, and asks anybody who joins past that to wait a moment ("Too many people
+joined voice just now. Try again in a moment."); the app tries again by itself. Each person may
+make at most 2 joins that need a new connection in any two minutes ("You have joined voice too
+often just now. Try again in a moment."), so that nobody can use them all up alone; a join whose
+first name is refused opens two connections. A person whose phone comes back within the
+45 seconds needs no new connection, and neither does one who joins again from another phone. There
+are two ways round the autoban, both in the Mumble server's own settings file (`mumble-server.ini`
+or `murmur.ini`):
+
+- `autobanSuccessfulConnections=false`: connections that succeed are not counted;
+- `autobanAttempts=0`: the autoban is off.
+
+Then switch on **The voice server's autoban is off**, and the plugin's own limit counts but refuses
+nobody. Leave it off while the Mumble server bans as it comes.
+
+### Limits
+
+- **Four voices at once to a phone.** A fifth person talking in the channel is not heard on that
+  phone until one of the four has gone quiet for a moment.
+- **50 people talking from Matty at once** on a Mattermost server, **6 joins a minute** a person,
+  and **2 joins that need a new Mumble connection in any two minutes** a person (a join whose first
+  name is refused opens two connections).
+- A voice packet larger than 1 KB, or more than 100 of them in a second, is dropped.
+- A session ends when the person leaves, when Mumble kicks or bans them or the connection to it is
+  lost, when they join again from another phone, when talk is switched off or the Mumble settings
+  change, when they may no longer watch, when the Mattermost session they joined from signs out
+  (looked at once a minute), and when the plugin stops, restarts or is upgraded ("Voice is
+  restarting on this server.", after which the app joins again by itself). The app is told which,
+  in a sentence.
+
+### The card and the alert
+
+**Talking from Matty**, at the end of the Mumble section, shows whether the voice port is open and
+the addresses phones are given, or why not; whether the Mumble server is connected; how many people
+are talking from Matty through this server now (never who); whether the autoban is marked as off;
+and the Mumble server's last refusal of somebody joining, with when. While talk is switched on and
+the port is down, system admins also see why in the panel.
 
 ## Soundboard
 

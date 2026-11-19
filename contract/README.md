@@ -45,6 +45,8 @@ VillaNET, `ceo.villa.villanet`; 2 was 3.5.0.
 Nothing else moved: every other route's shape and every other field are as in revision 3. Two things
 were added, each with a section of its own below: [a signed release](#a-signed-release) and
 [the app check](#the-app-check). From 4.1.0, a third: [push notifications](#push-notifications).
+From 4.3.0, a fourth: the voice server's channels and more about each person, and talking in them
+from Matty, in [voice](#voice).
 
 **Historical identifiers.** Some names were chosen when the plugin was VillaNET and stay as they are,
 because they are stored in posts and data that already exist and nobody is shown them: the post
@@ -87,7 +89,7 @@ make carries `Authorization: Bearer <session token>` and `X-Requested-With: XMLH
 
 | Read | For | Notes |
 | --- | --- | --- |
-| `GET /access` | anybody signed in | `{access, configured, contract, version, name, artwork, release, app}`. The one read about the reader every screen needs, and the one a player repeats while it plays. `name` is what to call the plugin wherever a person reads it; `artwork` says whether to draw an emblem and a ghost; `release` is `{state, version}`, whether this plugin is a signed release (see "A signed release"); `app` is what the app check is set to and found for this session (see "The app check"); from 4.1.0, `push` says whether this server takes push registrations, with the key to register with (see "Push notifications"). `access` is `linked`, `letIn`, `locked` or `unknown` (the store did not answer: take nothing away, ask again). |
+| `GET /access` | anybody signed in | `{access, configured, contract, version, name, artwork, release, app}`. The one read about the reader every screen needs, and the one a player repeats while it plays. `name` is what to call the plugin wherever a person reads it; `artwork` says whether to draw an emblem and a ghost; `release` is `{state, version}`, whether this plugin is a signed release (see "A signed release"); `app` is what the app check is set to and found for this session (see "The app check"); from 4.1.0, `push` says whether this server takes push registrations, with the key to register with (see "Push notifications"); from 4.3.0, while voice is on, `voice` says whether a Matty may talk in its channels (see "Voice"). `access` is `linked`, `letIn`, `locked` or `unknown` (the store did not answer: take nothing away, ask again). |
 | `GET /release` | anybody signed in | `{state, version, reason?, manifest?, rsa?, mldsa87?}`: whether this plugin is a signed release, and the release's manifest and both signatures for a client to verify for itself. See "A signed release". |
 | `POST /app/challenge` | anybody signed in, 10 a minute | `{challenge, expires}`: a challenge for this session's app check, good for five minutes and for one answer. See "The app check". |
 | `POST /app/attest` `{challenge, origin, chain, claims}` | anybody signed in, 10 a minute | `{state, reason?, development?, versionCode?, expires}`: the verdict for this session. See "The app check". |
@@ -101,7 +103,7 @@ make carries `Authorization: Bearer <session token>` and `X-Requested-With: XMLH
 | `GET /accounts` | linked or let in | Everybody's Steam status and Hytale names, and what each person is doing (below). `ETag` and `304` as above. Nothing in it moves by itself. |
 | `POST /me/link {token}` | anybody signed in, 5 per 15 minutes | `{streamKey, access, configured}`: the caller's access after the link. An empty token is `400 bad_request`. |
 | `DELETE /me/link` | anybody signed in, never metered | `{streamKey: "", access, configured}`: the caller's access after the unlink. |
-| `GET /me` | anybody signed in | The web panel's own document: the reader's stream key, connected accounts and panel settings, and `name`, `artwork`, `release` and `app` as on `/access`; for system admins, `releaseAlert` when the plugin's files are not as signed or its folder holds other files nobody signed, and from 4.1.0 `pushAlert`, a sentence, while push notifications are switched on here and Mattermost pushes to nobody (see "Push notifications"). `bannerColor` is `""` when no colour is set: draw the banner in the theme's accent. A native app has no use for it. |
+| `GET /me` | anybody signed in | The web panel's own document: the reader's stream key, connected accounts and panel settings, and `name`, `artwork`, `release` and `app` as on `/access`; for system admins, `releaseAlert` when the plugin's files are not as signed or its folder holds other files nobody signed, and from 4.1.0 `pushAlert`, a sentence, while push notifications are switched on here and Mattermost pushes to nobody (see "Push notifications"), and from 4.3.0 `voiceTalkAlert`, a sentence, while talking from Matty is switched on and its voice port is down (see "Talking from Matty"). `bannerColor` is `""` when no colour is set: draw the banner in the theme's accent. A native app has no use for it. |
 | `GET /clips` | linked or let in | `{clips: [...]}`, newest first: each clip as `fixtures/clip.json`. `snapshot.clips.version` changes whenever a clip, a title, a picture, a count or when a clip goes does: a client keeps the list it has until that moves. |
 | `GET /clips/clip?id=` | linked or let in | One clip. `410 clip_gone` once it has expired or been deleted, which is the only answer that means so. |
 | `GET /clips/cards?ids=` | linked or let in | Up to 25 ids, comma separated: `{cards: {id: card or null}}`, `null` for a clip that has gone. A card says when its clip goes (`expiresAt`). |
@@ -276,8 +278,9 @@ attests the first certificate of an app's signing history, never the ML-DSA one)
 adds; and the key is not one every app may use.
 
 With `require`, every request whose `User-Agent` begins `Matty/` and whose session has not passed is
-refused on every route but `GET /access`, `GET /me`, `GET /release`, the two above and
-`DELETE /me/push` (taking its own push registration back always works), with `403` and
+refused on every route but `GET /access`, `GET /me`, `GET /release`, the two above,
+`DELETE /me/push` (taking its own push registration back always works) and, from 4.3.0,
+`POST /voice/leave` (leaving voice always works), with `403` and
 `app_unverified` (`fixtures/refusal-app-unverified.json`); the sentence says why. Requests that
 do not say they are Matty, the web panel's among them, are never refused by it. The check recognises
 the official app; it cannot wall out a program that hides what it is.
@@ -311,7 +314,7 @@ The codes a client of the routes above meets:
 
 | Code | From | Means |
 | --- | --- | --- |
-| `app_unverified` | every route but `GET /access`, `/me`, `/release`, the two app check routes and `DELETE /me/push`, to a request saying it is Matty, while the app check is `require` | This session's Matty has not passed the app check: not checked yet, or checked and failed (the sentence says which). Prove it (see "The app check") and ask again; a Matty that failed for what it is (another certificate, an unlocked phone) fails again. |
+| `app_unverified` | every route but `GET /access`, `/me`, `/release`, the two app check routes, `DELETE /me/push` and `POST /voice/leave`, to a request saying it is Matty, while the app check is `require` | This session's Matty has not passed the app check: not checked yet, or checked and failed (the sentence says which). Prove it (see "The app check") and ask again; a Matty that failed for what it is (another certificate, an unlocked phone) fails again. |
 | `locked`, `watch_only` | any route that is not open | The reader may not do this: not let in at all, or let in to watch where a link is needed. Ask `GET /access` again (duty 3). |
 | `store` | any | The server could not read or save just now (its app check records among them, while the app check is `require`), or, from `PUT /me/push`, its confirm and its test, push is switched on but the server's push key is not ready yet. Worth trying again: a client keeps what it still has to send. |
 | `rate_limited` | any metered route | Too often. `retryAfterMs` says when. Never from `DELETE /me/link`, `DELETE /me/banner`, the Twitch, Steam and Hytale disconnects (`DELETE /twitch/link`, `/steam/link`, `/hytale/link`) or dismissing their notices, which no meter stands in front of. Leaving or cancelling a plan, clearing What's on?, going back to Automatic and removing your own sounds share their route's meter (the schedule's, What's on?'s, the award picker's, the soundboard's edits), whose wait is seconds and is given in `retryAfterMs`. |
@@ -325,6 +328,7 @@ The codes a client of the routes above meets:
 | `conflict` | `PUT /me/banner/crop` | The body names, by its `v`, a picture that is not the reader's banner any more: another device set a new one while this part was being chosen. Nothing changed. Asking again with the same `v` never works; read `GET /banners` again and choose a part of the new picture. |
 | `clip_gone` | the clip routes | The clip has expired or been deleted (`410`). |
 | `gone`, `full`, `own_plan`, `busy`, `not_yours` | the schedule routes | The plan is no longer there, has no room, is the caller's own, is being changed by too many at once, or is somebody else's to change. |
+| `unavailable`, `not_found`, `voice_denied`, `voice_refused`, `conflict`, `bad_request`, `too_large` | the voice routes, from 4.3.0 | Talk is off or the voice server cannot be reached; no such channel; the voice server kept the reader out of the channel; the voice server refused the reader's connection; not in voice. See [Talking from Matty](#talking-from-matty). |
 
 (The clips and the soundboard have more codes of their own, for routes only the web panel calls.)
 
@@ -691,6 +695,161 @@ or when the server made the hello, test or ended push.
 
 A push is not stored by the server and not sent again: what was waiting to go when the plugin
 stops or restarts is lost.
+
+## Voice
+
+The snapshot's `voice` object is who is on the voice server (Mumble) the plugin connects to, as
+read by the plugin's own connection there. From 4.3.0, an addition to revision 4, it also carries
+the voice server's channels, and for each person their session, their channel, whether they are
+deafened and whether they are there through Matty; and `GET /access` carries `voice`. A client
+that does not read them loses nothing.
+
+**In the snapshot** (`fixtures/snapshot.json`), only while an admin has voice switched on; absent
+otherwise (`fixtures/snapshot-quiet.json`):
+
+```jsonc
+"voice": {
+  "connected": true,                  // the plugin is connected to the voice server now
+  "channels": [                       // from 4.3.0: the channel tree, in the order to draw it
+    { "id": 0, "name": "Test", "depth": 0 },
+    { "id": 2, "name": "Gaming", "parent": 0, "depth": 1 },
+    { "id": 4, "name": "Duo", "parent": 2, "depth": 2, "max": 2 },
+    { "id": 1, "name": "Lobby", "parent": 0, "depth": 1 }
+  ],
+  "people": [                         // everybody connected to the voice server
+    { "session": 5, "name": "Bob", "userId": "u-bob", "channel": 2, "muted": true, "deaf": true },
+    { "session": 12, "name": "dave (Matty)", "userId": "u-dave", "channel": 1, "phone": true },
+    { "session": 7, "name": "Guest" }
+  ]
+}
+```
+
+- **`connected`** false: the plugin is not connected to the voice server just now (it is down, it
+  refused the plugin, or the plugin is still connecting), and `channels` and `people` are absent.
+  That is not "nobody is in voice": a client shows nothing and claims nothing. Connected with
+  nobody there, `people` is absent.
+- **`channels`**, from 4.3.0: every channel of the voice server, in tree order: a channel before
+  the channels under it, and channels under the same one by their position on the voice server and
+  then by name. `id` is always there, `0` included: `0` is the root. `parent` is the id of the
+  channel it is under, `0` included, on every channel but the root, which has none. `depth` is `0`
+  for the root, `1` under it, and so on. `max` is how many people the channel takes, only when it
+  has a limit of its own (a channel without one takes as many as the voice server's own setting
+  allows, which the plugin is not told). A channel whose parent the plugin was not told of is left
+  out, with the channels under it. Absent from servers before 4.3.0: a client then draws the people
+  as one list.
+- **`people`**: one for each connection to the voice server, sorted by name (in any case, then
+  exactly), the plugin's own connection and the names an admin hides left out. The same person may
+  be there more than once (a desktop and a phone), each with their own entry.
+  - `session`, from 4.3.0: the voice server's number for the connection, which tells two entries
+    apart while both are connected. Somebody who connects again has another.
+  - `name`: as the voice server knows them.
+  - `userId`: the Mattermost account they are, when the server could tell: for somebody there
+    through Matty, the account that joined, whatever the name; for anybody else, by the server's
+    name rules (the admin's list of names that differ, and, when an admin allows it, a name that is
+    a username). Absent: nobody the server knows.
+  - `channel`, from 4.3.0: the id of the channel they are in. Absent is `0`, the root.
+  - `muted`: silent, for whatever reason: muted or deafened, by themselves or by an admin, or not
+    allowed to speak in the channel they are in.
+  - `deaf`, from 4.3.0: deafened, by themselves or by an admin. Somebody deafened is `muted` too.
+  - `phone`, from 4.3.0: there through Matty, on a connection the plugin holds for them.
+- `people[id].voice` in the people index is the same people by account, `muted` only when every
+  entry of theirs is (see "The people index").
+- Who is speaking is not in the snapshot.
+- A change to the channels or to anybody's entry is sent as a new snapshot (the `streams` event),
+  at most once every two seconds, a run of changes as one; a change nobody draws (a channel's
+  description, somebody's comment) sends nothing.
+
+**In `GET /access`**, from 4.3.0, only while voice is on (`fixtures/access-voice.json`): `voice` is
+`{talk, reason?}`. `talk` is `on` while a Matty may join a voice channel and talk from it, and
+`off` otherwise; `reason`, with `off`, is a sentence to show ("Talking from Matty is switched off
+on this server."). A client shows the channels and the people from the snapshot whatever `talk`
+says, and offers joining only while it is `on`.
+
+### Talking from Matty
+
+From 4.3.0, a Matty may join the voice server's channels and talk there, through the plugin: the
+phone opens one WebRTC connection, audio only, to the Mattermost server, and the plugin holds a
+Mumble connection for the reader and passes the voice between them without decoding it. Every route
+here needs `X-Requested-With: XMLHttpRequest` (else `403 forbidden`), takes and answers JSON of at
+most 64 KiB (else `413 too_large`), and is never cached.
+
+**`GET /access`'s `voice`** (`fixtures/access-voice.json`, `fixtures/access-voice-on.json`):
+`talk` is `on` while all of these hold: an admin has switched it on with a voice server set, the
+server's voice port is open with addresses to give phones, the plugin's own connection to the voice
+server is connected, and Mattermost is not a cluster. Otherwise `off`, with `reason`, one of:
+
+- "Talking from Matty is switched off on this server."
+- "Talking from Matty works on a single Mattermost server only."
+- "The voice server is not connected."
+- "The voice port must be between 1024 and 65535."
+- "Talking from Matty is not working on this server just now." (the port or the addresses; the
+  admins are told why)
+- "Talking from Matty is starting on this server. Try again in a moment."
+
+A client offers joining only while it is `on`, and asks again after a `503 unavailable` from a
+voice route.
+
+| Route | For | Notes |
+| --- | --- | --- |
+| `POST /voice/join` `{channel, muted, deafened, sdp}` | linked or let in, 6 a minute | `200 {sdp, session, channel, name}` (`fixtures/voice-join.json`): the answer to the offer, with every candidate (no trickle); the reader's session number on the voice server; the channel they are in; and the name they have there, `"<username> (Matty)"` or, on a voice server that does not take it, `"<username>.matty"`. `channel` is required, `0` (the root) included; `muted` and `deafened` say how to join, deafened being muted too. A join by somebody who has a voice session takes it over, on the voice server's connection the session has, and the old phone is told `replaced`. |
+| `POST /voice/move` `{channel}` | linked or let in, 60 a minute with `/voice/state` | `200 {channel}` (`fixtures/voice-move.json`). |
+| `POST /voice/state` `{muted, deafened}` | the same | `200 {muted, deafened}` as they now are (`fixtures/voice-state.json`); deafened is muted too. |
+| `POST /voice/leave` | anybody signed in, never metered | `200 {left}` (`fixtures/voice-leave.json`): whether there was a session to end. Answered whatever `talk` says, whatever the reader's access and whatever the app check found: leaving is never refused. |
+| `GET /admin/voice` | system admins | The System Console's card (`fixtures/admin-voice.json`). |
+
+**The offer** has exactly one audio section with `a=sendonly` offering Opus (the microphone, with
+the `urn:ietf:params:rtp-hdrext:ssrc-audio-level` header extension: without it the reader is never
+heard), one to eight audio sections with `a=recvonly`, one data channel section, and at most 16
+candidates in any one section; anything else, or a section with port 0, is `400 bad_request`. The server sends
+nothing to a candidate whose address is unspecified, multicast or broadcast. The phone opens the
+data channel `voice` itself, and no other: a second data channel, or one by another name, ends the
+connection at once. The
+server answers the first `min(4, recvonly sections)` with a track each, Opus at payload type 111,
+and the rest inactive. The server's candidates are host candidates on one UDP port, IPv4 only.
+
+**The tracks.** Each person the phone hears takes one track for as long as they talk: a spell of
+talking starts with the RTP marker set, timestamps follow the voice server's own sequence (960 a
+20 ms packet), and a track is free again 300 ms after its speaker's last packet. More than four
+people talking at once: the fifth is not sent until a track is free. The microphone's voice goes to
+the voice server only while the reader is talking by its audio level: from a packet at level 40 or
+louder (a smaller number is louder, as RFC 6464 has it), until 400 ms after the last at 50 or
+louder; and never while muted, deafened, muted by the voice server or not allowed to speak there.
+
+**The data channel `voice`**: the server speaks, JSON text, one message each; the phone sends
+nothing and closes it only by closing the connection.
+
+```jsonc
+{"talking": [12, 15]}        // the sessions heard on this phone now, and its own while its voice goes up; on every change
+{"self": {"channel": 2, "muted": false, "suppressed": false}}
+                             // the reader's channel, muted by the voice server, not allowed to speak there;
+                             // when the channel opens and on every change
+{"end": "kicked", "reason": "You were removed from the voice server: Spamming."}
+                             // the session is over; the server closes the connection after it
+```
+
+(`fixtures/voice-signal-talking.json`, `-self.json`, `-end.json`.) `end` is one of `kicked`,
+`banned`, `mumble` (the voice server's connection was lost, or its settings changed, or the plugin
+is stopping, restarting or being upgraded, "Voice is restarting on this server.": joining again
+can work), `replaced` (another join took the session over), `off` (talk was switched off, or the
+reader may no longer watch) and `session` (the Mattermost session that joined has ended). `reason`
+is a sentence to show. A leave, or a phone that never came back, gets no `end`.
+
+**A phone that loses its connection** (closed, failed, or disconnected for 5 seconds) leaves its
+session in place for 45 seconds, deafened on the voice server; a join in that time takes it over
+without a new connection to the voice server. After that the session ends.
+
+**Refusals** (with the usual body):
+
+| Status and code | When |
+| --- | --- |
+| `503 unavailable` | `talk` is off (the sentence is `voice.reason`, `fixtures/refusal-voice-off.json`); the voice server could not be reached or did not answer; the connection to it was lost; 50 people already talk from Matty on this server; or the plugin's own limit of connections to the voice server is used up for now, with `retryAfterMs` (`fixtures/refusal-voice-budget.json`). Worth trying again, after `retryAfterMs` when there is one. |
+| `404 not_found` | No such channel on the voice server (`fixtures/refusal-voice-not-found.json`). |
+| `403 voice_denied` | The voice server did not let the reader into that channel: "The voice server did not let you into that channel." (with its reason after a colon when it gave one), or "That channel is full." (`fixtures/refusal-voice-denied.json`); or a Mumble admin kicked or banned the reader while the join was under way, with the sentence the `end` of a kick or a ban has. |
+| `409 voice_refused` | The voice server refused the reader's connection: the server password, the server full, its Mumble version, a certificate needed, or the name (one it does not take, one in use, or one registered to somebody else) (`fixtures/refusal-voice-refused.json`). Asking again does not help until an admin changes something. |
+| `409 conflict` | A move or a change with no voice session. |
+| `400 bad_request` | No `channel`, an offer of another shape, a body that is not JSON, or an account with no username. |
+| `429 rate_limited` | More than 6 joins a minute, or 60 moves and changes; or a third join in two minutes that needs a new connection to the voice server ("You have joined voice too often just now. Try again in a moment."), with `retryAfterMs`. A join that takes over the reader's session needs none. |
+| `403 locked`, `watch_only`, `app_unverified`, `503 store` | As everywhere. |
 
 ## What a client must do
 

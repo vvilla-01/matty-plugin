@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -371,4 +372,229 @@ func TestNamesThatDifferFoldOnlyASCII(t *testing.T) {
 	off.VoiceMatchUsernames = false
 	require.False(t, voiceNameMatches("Bob", "bob", off.voiceNameMap(), off))
 	require.True(t, voiceNameMatches("Dave_", "dave", overrides, off))
+}
+
+// The rig's voice server, as a Mumble client is told of it: Test (the root),
+// Lobby, Gaming and AFK under it, and Duo under Gaming, which takes two. AFK
+// is placed last by its position, the others beside each other by name.
+func voiceTreeClient() *gumble.Client {
+	root := &gumble.Channel{ID: 0, Name: "Test"}
+	lobby := &gumble.Channel{ID: 1, Name: "Lobby", Parent: root}
+	gaming := &gumble.Channel{ID: 2, Name: "Gaming", Parent: root}
+	afk := &gumble.Channel{ID: 3, Name: "AFK", Parent: root, Position: 10}
+	duo := &gumble.Channel{ID: 4, Name: "Duo", Parent: gaming, MaxUsers: 2}
+
+	return &gumble.Client{
+		Channels: gumble.Channels{0: root, 1: lobby, 2: gaming, 3: afk, 4: duo},
+		Users:    gumble.Users{},
+	}
+}
+
+func parentOf(id uint32) *uint32 {
+	return &id
+}
+
+// A client draws the tree from the list as it comes: a channel before the
+// ones under it, channels beside each other by position and then by name.
+func TestTheChannelTreeComesInTreeOrder(t *testing.T) {
+	client := voiceTreeClient()
+
+	require.Equal(t, []voiceChannel{
+		{ID: 0, Name: "Test", Depth: 0},
+		{ID: 2, Name: "Gaming", Parent: parentOf(0), Depth: 1},
+		{ID: 4, Name: "Duo", Parent: parentOf(2), Depth: 2, Max: 2},
+		{ID: 1, Name: "Lobby", Parent: parentOf(0), Depth: 1},
+		{ID: 3, Name: "AFK", Parent: parentOf(0), Depth: 1},
+	}, voiceChannelsOf(client))
+
+	// A channel under one the tree does not hold is left out, with what is
+	// under it.
+	lost := &gumble.Channel{ID: 8, Name: "Gone"}
+	client.Channels[9] = &gumble.Channel{ID: 9, Name: "Orphan", Parent: lost}
+	client.Channels[10] = &gumble.Channel{ID: 10, Name: "Under the orphan", Parent: client.Channels[9]}
+	require.Len(t, voiceChannelsOf(client), 5)
+
+	// Nothing known yet is nothing, not an empty tree.
+	require.Nil(t, voiceChannelsOf(&gumble.Client{}))
+}
+
+// The root is 0 and is written as 0; so is a parent that is the root. A
+// limit is there only where a channel has one.
+func TestChannelIdsAreAlwaysWritten(t *testing.T) {
+	encoded, err := json.Marshal(voiceChannelsOf(voiceTreeClient())[:3])
+	require.NoError(t, err)
+	require.JSONEq(t, `[
+		{"id": 0, "name": "Test", "depth": 0},
+		{"id": 2, "name": "Gaming", "parent": 0, "depth": 1},
+		{"id": 4, "name": "Duo", "parent": 2, "depth": 2, "max": 2}
+	]`, string(encoded))
+}
+
+// Each person says which channel they are in, and whether they hear anybody.
+func TestTheRosterSaysWhereEverybodyIs(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetUserByUsername", "victor").Return(&model.User{Id: "uid-victor", Username: "victor"}, nil)
+	api.On("GetUserByUsername", mock.Anything).Return(nil, &model.AppError{Message: "not found"})
+
+	p := &Plugin{}
+	p.SetAPI(api)
+
+	client := voiceTreeClient()
+	client.Users[3] = &gumble.User{Session: 3, Name: "Victor", Channel: client.Channels[1]}
+	client.Users[5] = &gumble.User{Session: 5, Name: "Bob", Channel: client.Channels[4], SelfDeafened: true}
+	client.Users[6] = &gumble.User{Session: 6, Name: "Carol", Channel: client.Channels[0], Deafened: true}
+	client.Users[7] = &gumble.User{Session: 7, Name: "Erin"}
+	client.Users[1] = &gumble.User{Session: 1, Name: "VillaNET", Channel: client.Channels[0]}
+
+	require.Equal(t, []voicePerson{
+		{Session: 5, Name: "Bob", Channel: 4, Muted: true, Deaf: true},
+		{Session: 6, Name: "Carol", Muted: true, Deaf: true},
+		{Session: 7, Name: "Erin"},
+		{Session: 3, Name: "Victor", UserID: "uid-victor", Channel: 1},
+	}, p.rosterOf(client, voiceConfig()), "a person whose channel is not known yet is in the root")
+}
+
+// A move, a deafen and a new channel are each something the panel shows.
+func TestEveryNewFieldIsAVisibleChange(t *testing.T) {
+	victor := voicePerson{Session: 3, Name: "Victor", UserID: "uid-victor", Channel: 1}
+
+	for name, change := range map[string]func(*voicePerson){
+		"moved":         func(p *voicePerson) { p.Channel = 2 },
+		"deafened":      func(p *voicePerson) { p.Deaf = true },
+		"through Matty": func(p *voicePerson) { p.Phone = true },
+		"reconnected":   func(p *voicePerson) { p.Session = 4 },
+	} {
+		changed := victor
+		change(&changed)
+		require.False(t, sameRoster([]voicePerson{victor}, []voicePerson{changed}), name)
+	}
+
+	tree := voiceChannelsOf(voiceTreeClient())
+	require.True(t, sameChannels(tree, voiceChannelsOf(voiceTreeClient())))
+	require.True(t, sameChannels(nil, nil))
+
+	for name, change := range map[string]func(*gumble.Client){
+		"renamed":   func(c *gumble.Client) { c.Channels[1].Name = "Lounge" },
+		"reordered": func(c *gumble.Client) { c.Channels[3].Position = -1 },
+		"limited":   func(c *gumble.Client) { c.Channels[1].MaxUsers = 4 },
+		"moved":     func(c *gumble.Client) { c.Channels[4].Parent = c.Channels[1] },
+		"removed":   func(c *gumble.Client) { delete(c.Channels, 3) },
+		"made":      func(c *gumble.Client) { c.Channels[5] = &gumble.Channel{ID: 5, Name: "Raid", Parent: c.Channels[0]} },
+	} {
+		client := voiceTreeClient()
+		change(client)
+		require.False(t, sameChannels(tree, voiceChannelsOf(client)), name)
+	}
+
+	// A description is not drawn, so it is not a change.
+	described := voiceTreeClient()
+	described.Channels[1].Description = "Say hello"
+	require.True(t, sameChannels(tree, voiceChannelsOf(described)))
+}
+
+// A channel change alone republishes the roster, with the new tree on it.
+func TestAChannelChangeIsPublished(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetUserByUsername", mock.Anything).Return(nil, &model.AppError{Message: "not found"})
+
+	p := &Plugin{}
+	p.SetAPI(api)
+	p.setConfiguration(voiceConfig())
+	p.rosterCh = make(chan struct{}, 1)
+
+	client := voiceTreeClient()
+	epoch := p.beginVoiceEpoch()
+	p.publishVoice(client, p.getConfiguration(), epoch)
+	<-p.rosterCh
+	require.Len(t, p.voiceOf(p.getConfiguration()).Channels, 5)
+
+	p.publishVoice(client, p.getConfiguration(), epoch)
+	require.Empty(t, p.rosterCh, "nothing changed")
+
+	client.Channels[1].Name = "Lounge"
+	p.publishVoice(client, p.getConfiguration(), epoch)
+	require.Len(t, p.rosterCh, 1, "a renamed channel is a change")
+	require.Equal(t, "Lounge", p.voiceOf(p.getConfiguration()).Channels[3].Name)
+}
+
+// Somebody here through Matty is the account that joined, whatever the voice
+// server calls them, and is shown so at once: a session that never moves,
+// mutes or speaks sends no event that would rebuild the roster.
+func TestAPhoneSessionShowsTheAccountThatJoined(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetUserByUsername", "dave").Return(&model.User{Id: "uid-dave", Username: "dave"}, nil)
+	api.On("GetUserByUsername", mock.Anything).Return(nil, &model.AppError{Message: "not found"})
+
+	p := &Plugin{}
+	p.SetAPI(api)
+	p.setConfiguration(voiceConfig())
+	p.rosterCh = make(chan struct{}, 1)
+
+	client := voiceTreeClient()
+	client.Users[12] = &gumble.User{Session: 12, Name: "dave (Matty)", Channel: client.Channels[1]}
+	client.Users[13] = &gumble.User{Session: 13, Name: "Dave", Channel: client.Channels[2]}
+	p.setVoiceClient(client)
+	p.publishVoice(client, p.getConfiguration(), p.beginVoiceEpoch())
+
+	people := func() []voicePerson { return p.voiceOf(p.getConfiguration()).People }
+	require.Equal(t, []voicePerson{
+		{Session: 13, Name: "Dave", UserID: "uid-dave", Channel: 2},
+		{Session: 12, Name: "dave (Matty)", Channel: 1},
+	}, people(), "unknown, the name rules match the name to nobody")
+
+	remove := p.putVoicePhone(12, "uid-dave")
+	require.Eventually(t, func() bool {
+		return len(people()) == 2 && people()[1].UserID == "uid-dave" && people()[1].Phone
+	}, 5*time.Second, 10*time.Millisecond)
+	require.False(t, people()[0].Phone, "the desktop Dave is not here through Matty")
+	require.Equal(t, map[string]string{"uid-dave": voiceOpen}, voiceByUser(p.voiceOf(p.getConfiguration())))
+
+	remove()
+	require.Eventually(t, func() bool {
+		return len(people()) == 2 && people()[1].UserID == "" && !people()[1].Phone
+	}, 5*time.Second, 10*time.Millisecond, "taken out, the session is a name again")
+}
+
+// A session that ends late takes out its own entry and never the one that
+// has since been given the same number.
+func TestThePhoneRegistryRemovesByIdentity(t *testing.T) {
+	var registry voicePhoneRegistry
+
+	_, ok := registry.userOf(12)
+	require.False(t, ok, "empty and ready as it is")
+
+	first := registry.put(12, "uid-dave")
+	second := registry.put(12, "uid-bob")
+
+	require.False(t, first(), "the first entry was replaced")
+	userID, ok := registry.userOf(12)
+	require.True(t, ok)
+	require.Equal(t, "uid-bob", userID)
+	require.Equal(t, 1, registry.count())
+
+	require.True(t, second())
+	require.False(t, second(), "once only")
+	_, ok = registry.userOf(12)
+	require.False(t, ok)
+	require.Zero(t, registry.count())
+}
+
+// /access says whether a Matty may talk while voice is on, and nothing about
+// voice while it is off.
+func TestAccessSaysWhetherTalkIsOn(t *testing.T) {
+	s := newAccessScene(t)
+
+	var off map[string]any
+	require.NoError(t, json.Unmarshal(s.serve(http.MethodGet, "/api/v1/access", sceneLetIn, "", nil).Body.Bytes(), &off))
+	require.NotContains(t, off, "voice", "voice switched off says nothing of it")
+
+	cfg := s.p.getConfiguration().Clone()
+	cfg.EnableVoice, cfg.MumbleServer = true, "192.168.1.20"
+	s.p.setConfiguration(cfg)
+
+	var on struct {
+		Voice *voiceWord `json:"voice"`
+	}
+	require.NoError(t, json.Unmarshal(s.serve(http.MethodGet, "/api/v1/access", sceneLetIn, "", nil).Body.Bytes(), &on))
+	require.Equal(t, &voiceWord{Talk: "off", Reason: "Talking from Matty is switched off on this server."}, on.Voice)
 }

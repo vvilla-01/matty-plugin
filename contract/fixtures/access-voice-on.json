@@ -1,0 +1,26 @@
+{
+  "access": "letIn",
+  "configured": true,
+  "contract": 4,
+  "version": "VERSION",
+  "name": "Matty",
+  "artwork": {
+    "emblem": false,
+    "ghost": false
+  },
+  "release": {
+    "state": "unsigned",
+    "version": "VERSION"
+  },
+  "app": {
+    "check": "report",
+    "state": "none"
+  },
+  "push": {
+    "state": "off",
+    "reason": "Push notifications are switched off on this server."
+  },
+  "voice": {
+    "talk": "on"
+  }
+}

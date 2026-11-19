@@ -2241,13 +2241,13 @@ button.vntv-onnow.vntv-player-onnow[data-open="true"] {
 }
 
 /* ---- In voice ----
-   One row, and no row at all when nobody is in there. With a single voice
-   channel there is no tree to draw, so this is a line of names rather than a
-   list with headings — and a line of names does not need a popout to open.
+   No row at all when nobody is in there. Otherwise each voice channel
+   somebody is in, in the voice server's order, its name over a line of the
+   people in it (VoiceStrip.tsx); a server that sends no channels gets the one
+   line of names alone.
 
-   It scrolls sideways rather than wrapping. A row that grew to three lines on a
-   busy night would push the players down the panel, which is the one thing the
-   top of the panel must not do. */
+   Each line scrolls sideways rather than wrapping, so a busy channel is still
+   one line, and the players below move down by a line a channel at most. */
 .vntv-voice {
     display: flex;
     align-items: center;
@@ -2297,6 +2297,50 @@ button.vntv-onnow.vntv-player-onnow[data-open="true"] {
 
 .vntv-voice-person[data-me="true"] {
     color: var(--vntv-accent);
+}
+
+/* The channels, one under the other, each its name over its people, and the
+   headphones beside the first channel's name. */
+.vntv-voice[data-channels="true"] {
+    align-items: flex-start;
+}
+
+.vntv-voice-channels {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.vntv-voice-channel {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.vntv-voice-channel-name {
+    overflow: hidden;
+    color: var(--vntv-second);
+    font-family: var(--vntv-display);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Muted or deafened, after the name: small, and as dim as the name. */
+.vntv-voice-mark {
+    display: inline-block;
+    margin-left: 3px;
+    line-height: 0;
+    vertical-align: -1px;
 }
 
 /* ---- 3.4.0: Playing now ----

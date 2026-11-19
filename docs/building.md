@@ -132,13 +132,13 @@ identity, and the SHA-256 of the two certificates.
 as a command, so a bundle, or an unpacked plugin folder, can be checked before it is installed:
 
 ```bash
-go run ./build/checkrelease dist/ceo.villa.matty-4.2.0-linux-amd64.tar.gz
+go run ./build/checkrelease dist/ceo.villa.matty-4.3.0-linux-amd64.tar.gz
 ```
 
 It checks both signatures before it reads anything in the manifest, then the product, the kind, the
 version and the platforms, then every listed file's size and SHA-256, and that what Mattermost loads
 (`plugin.json`, the executables and the web panel's bundle) is listed. It prints
-`signed: ceo.villa.matty 4.2.0 linux-amd64, <n> files`, `unsigned: there is no release folder`, or
+`signed: ceo.villa.matty 4.3.0 linux-amd64, <n> files`, `unsigned: there is no release folder`, or
 `altered:` and why; then the manifest's SHA-256, the two certificates it checked against, and any
 files in the folder that nobody signed. It exits 0 for a signed release, 1 for anything else and 2
 when it was not asked properly. `-rsa-cert` and `-mldsa-cert` check against other certificates,
@@ -483,13 +483,20 @@ read them. `app`, `POST /app/challenge` and `POST /app/attest` are the app check
 shows the server, on Android's word, that it is the official build; a client that does not read
 them loses nothing while the server's **Check the Matty app** setting (under **App check**) is
 `off` or `report`, but under `require` a Matty that has not proved itself is refused with `403` and `app_unverified` on every route except
-`GET /access`, `GET /me`, `GET /release`, the two app routes and, from 4.1.0, `DELETE /me/push` (see
+`GET /access`, `GET /me`, `GET /release`, the two app routes, from 4.1.0 `DELETE /me/push` and,
+from 4.3.0, `POST /voice/leave` (see
 [Signed releases](security.md#signed-releases) and [The app check](security.md#the-app-check)).
 From 4.1.0 a third: `push` in `GET /access` and the `/me/push` routes, with which Matty registers
 for [push notifications](push.md) and the server sends them; a client that does not read them loses
 nothing (`contract/README.md`, "Push notifications"). Those routes are not exempt from the app
 check, but for `DELETE /me/push`: under `require`, a Matty that has not proved itself cannot
 register, and can always take its registration back.
+From 4.3.0 a fourth: `voice` in `GET /access`, the `/voice` routes and the data channel `voice`,
+with which Matty shows the Mumble server's channels and people talk in them from their phones
+([Talking from Matty](voice.md#talking-from-matty)); a client that does not read them loses nothing
+(`contract/README.md`, "Voice"). Those routes are not exempt from the app check either, but for
+`POST /voice/leave`: under `require`, a Matty that has not proved itself cannot join, and can always
+leave.
 
 The rest of this section is the part about people's Steam and Hytale accounts, new in 3.4.0.
 
@@ -517,8 +524,8 @@ The rest of this section is the part about people's Steam and Hytale accounts, n
 
 | Method and path | Who | Body | Answer | Refusal codes |
 | --- | --- | --- | --- | --- |
-| `GET /access` | anybody signed in | — | `{"access", "configured", "contract", "version", "name", "artwork", "release", "app"}`, and from 4.1.0 `"push"` | — |
-| `GET /me` | anybody signed in | — | 3.3.0's fields, plus `steam` and `hytale` (below), and from 4.0.0 `name`, `artwork`, `release` and `app`; from 4.1.0, for system admins, `pushAlert` | `store` |
+| `GET /access` | anybody signed in | — | `{"access", "configured", "contract", "version", "name", "artwork", "release", "app"}`, from 4.1.0 `"push"`, and from 4.3.0 `"voice"` | — |
+| `GET /me` | anybody signed in | — | 3.3.0's fields, plus `steam` and `hytale` (below), and from 4.0.0 `name`, `artwork`, `release` and `app`; from 4.1.0, for system admins, `pushAlert`; from 4.3.0, `voiceTalkAlert` | `store` |
 | `GET /banners` | anybody signed in | — | from 3.7.0, `{"version", "people": {"<user id>": {"v", "type", "crop"?}}}`, everybody's profile banner, and from 3.8.0 the part of it that shows (`contract/README.md`, "Profile banners"); `304` to a client that sends back the `ETag` of the answer it holds | `store` |
 | `GET /banner?user=&v=` | anybody signed in, loaded as a picture | — | the picture's bytes, as they were sent | `not_found` |
 | `POST /me/banner` | regular members (not guests, not bots), 6 in 10 minutes | the picture, `Content-Type: image/jpeg`, `image/png` or `image/gif`; from 3.8.0 `?crop=x,y,w,h` may say the part to show | `201 {"v", "type", "crop"?}` | `bad_image`, `too_large`, `bad_crop`, `forbidden`, `rate_limited`, `store` |

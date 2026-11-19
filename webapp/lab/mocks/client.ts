@@ -37,7 +37,7 @@ import radioPicture from '../pictures/channel.svg';
 import sampleClipData from '../media/sample-clip.mp4';
 import {CLIP_POST_TYPE, MIN_CLIP_MS} from '../../src/clipLogic';
 import {channelOf, mattermostStore} from '../../src/mattermost';
-import type {AdminAppCheck, AdminChannel, AdminPush, AdminStills, ChannelPictureKind, MediaCacheStatus, NewSound, NowPlayingAnswer, PostSearch, StillClaim} from '../../src/client';
+import type {AdminAppCheck, AdminChannel, AdminPush, AdminStills, AdminVoice, ChannelPictureKind, MediaCacheStatus, NewSound, NowPlayingAnswer, PostSearch, StillClaim} from '../../src/client';
 import {findHashtags} from '../../src/linkify';
 import {PRODUCT_NAME} from '../../src/name';
 import {
@@ -1402,6 +1402,21 @@ export const fetchAdminPush = (): Promise<AdminPush> => answer(() => {
 
     return view;
 });
+
+// Talking from Matty, for a system admin: the lab's voice server is the
+// stand-in's, connected, with two people talking from the app and the last
+// refusal an hour ago.
+export const fetchAdminVoice = (): Promise<AdminVoice> => answer(() => ({
+    on: true,
+    connected: true,
+    port: 8445,
+    open: true,
+    addresses: ['203.0.113.7'],
+    talking: 2,
+    noBudget: false,
+    refused: 'That channel is full.',
+    refusedAt: Date.now() - 3600000,
+}));
 
 // The Mattermost name an admin card shows: first and last, as the console
 // does.

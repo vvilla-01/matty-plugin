@@ -37,7 +37,10 @@ use the default; on a server with a name of its own, that name stands where they
   the row one plan at a time. It shows on the streamer's profile too. Scheduling one is a calendar
   and a clock, with nothing to type.
 - **Who is in voice.** One row at the top of the panel listing whoever is on the Mumble server,
-  and no row at all when nobody is in there.
+  by channel, and no row at all when nobody is in there.
+- **Talking from Matty.** If an admin switches it on, the Matty app lists the Mumble channels, as
+  Discord lists its voice channels, and people who may watch join them and talk from their phone,
+  through this server, on one UDP port. Off by default; see [Talking from Matty](voice.md#talking-from-matty).
 - **A soundboard for whoever is in Mumble.** If an admin switches it on, somebody linked who is in
   Mumble gets a speaker in the bar at the bottom of the panel that opens a board of short sounds,
   each an emoji over a name. Pressing one plays it into the Mumble channel they are in. Greyed out while they are muted,
@@ -213,7 +216,7 @@ means Matty. Some things say Matty whatever the name is, because they name the p
 your server: the System Console's own listing and page (and so the paths the panel gives, such as
 **System Console > Plugins > Matty > Broadcast Box**), the server log, and the User-Agent the server sends
 to TMDB, IGDB, Twitch, Steam and Hytale
-(`MattyPlugin/4.2.0 (Mattermost plugin; +https://github.com/vvilla-01/matty-plugin)`, and to push
+(`MattyPlugin/4.3.0 (Mattermost plugin; +https://github.com/vvilla-01/matty-plugin)`, and to push
 servers `MattyPlugin` alone). The bot and the plugin's Mumble account have
 names of their own, under **Bot account** and **Mumble > Connect as**; both are Matty until you
 change them.
@@ -404,6 +407,11 @@ not mark `secret`.
 | Names to leave out | `Mattermost` | Bots rather than people. Comma separated. |
 | Match names to usernames | on | Marks your own row and puts headphones on the matching account; the soundboard uses the same match. Only plain-letter Mumble names match. See [Headphones for whoever is on Mumble](awards.md#headphones-for-whoever-is-on-mumble). |
 | Names that differ | *(blank)* | `mumbleName = mattermostUsername`, one per line, such as `alice_ = alice`. |
+| Let people talk from Matty | **off** | People who may watch join the Mumble channels from the Matty app and talk there, through this server, each on a Mumble connection of their own named `<username> (Matty)`. Needs **Show who is in voice**, the port below open and the address phones reach. One Mattermost server only. See [Talking from Matty](voice.md#talking-from-matty). |
+| Voice port (UDP) | `8445` | 1024 to 65535. The one UDP port every phone's voice reaches this server on: open it in the firewall, UDP. See [The port and the firewall](voice.md#the-port-and-the-firewall). |
+| Address for phones | *(blank)* | Where phones reach this server: IPv4 addresses or host names, one a line. Blank: the Site URL's host. See [The address](voice.md#the-address). |
+| The voice server's autoban is off | off | Lifts the plugin's own limit of 8 connections to the Mumble server in two minutes. Only once the Mumble server's autoban no longer counts them. See [The autoban, and the two ways round it](voice.md#the-autoban-and-the-two-ways-round-it). |
+| Talking from Matty | — | Whether the voice port is open, the addresses phones are given, whether Mumble is connected, how many people talk from Matty now, and Mumble's last refusal. See [The card and the alert](voice.md#the-card-and-the-alert). |
 | **Soundboard** | | |
 | Let people play sounds into Mumble | **off** | A speaker in the bar at the bottom of the panel, for people who have linked their stream and are in Mumble: a board of short sounds they play into their own Mumble channel. The plugin's Mumble account then sends audio; check [Setting the soundboard up](voice.md#setting-the-soundboard-up) first. Needs **Show who is in voice**. |
 | Wait between sounds (seconds) | `10` | 3 to 120, after somebody's own sound ends. One sound at a time and 8 a minute in all, whatever this says. |

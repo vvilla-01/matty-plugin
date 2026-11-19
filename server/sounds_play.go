@@ -131,12 +131,34 @@ func botCanSpeak(self *gumble.User) (bool, string) {
 	return true, ""
 }
 
+// voicePresser is who a press is read for: the Mattermost account and its
+// username, and this node's phone sessions (voice_phones.go), nil for none.
+type voicePresser struct {
+	userID   string
+	username string
+	phones   *voicePhoneRegistry
+}
+
+// owns is whether a Mumble session is the presser's, by the rule the roster
+// shows people by: a phone session this node holds is the account that
+// joined, whatever its name; any other is theirs by voiceNameMatches.
+func (who voicePresser) owns(user *gumble.User, overrides map[string]string, cfg *configuration) bool {
+	if who.phones != nil {
+		if owner, ok := who.phones.userOf(user.Session); ok {
+			return owner == who.userID
+		}
+	}
+
+	return voiceNameMatches(user.Name, who.username, overrides, cfg)
+}
+
 // readVoice is the presser's state and VillaNET's, from gumble's live state in
-// one client.Do: their sessions by voiceNameMatches's rule (none, not in
-// voice; two, ambiguous: one person, one Mumble client); that one session's
-// deafened, muted, suppressed and registered state; VillaNET's own; and, when
-// gumble already knows it, Whisper in their channel.
-func readVoice(client *gumble.Client, username string, cfg *configuration, perms mumblePermissions) voiceRead {
+// one client.Do: their sessions by voicePresser's rule (none, not in voice;
+// two, ambiguous: one person, one Mumble client); that one session's
+// deafened, muted, suppressed and registered state, a phone session's as the
+// voice server reports it; VillaNET's own; and, when gumble already knows
+// it, Whisper in their channel.
+func readVoice(client *gumble.Client, who voicePresser, cfg *configuration, perms mumblePermissions) voiceRead {
 	overrides := cfg.voiceNameMap()
 	read := voiceRead{}
 
@@ -146,7 +168,7 @@ func readVoice(client *gumble.Client, username string, cfg *configuration, perms
 			if user == nil || user == client.Self {
 				continue
 			}
-			if voiceNameMatches(user.Name, username, overrides, cfg) {
+			if who.owns(user, overrides, cfg) {
 				matched = append(matched, user)
 			}
 		}
@@ -221,10 +243,15 @@ func (p *Plugin) voiceStateOf(userID string, cfg *configuration) voiceRead {
 		return voiceRead{code: soundCodeStore}
 	}
 
-	read := readVoice(client, user.Username, cfg, p.sounds().permissions())
+	read := readVoice(client, p.presser(userID, user.Username), cfg, p.sounds().permissions())
 	p.noteSoundRead(read)
 
 	return read
+}
+
+// presser is a Mattermost account as a press is read for it.
+func (p *Plugin) presser(userID, username string) voicePresser {
+	return voicePresser{userID: userID, username: username, phones: &p.voicePhones}
 }
 
 // permissions is the stand-in a test gave, or gumble's.
@@ -445,7 +472,7 @@ func (pl *soundPlayer) run() {
 
 // presserStillThere is the check before every packet after the first: the
 // same session, in the same channel, not muted, deafened or suppressed, and
-// still theirs by name. A read lock over gumble's maps, cheap at fifty a
+// still theirs, by name or as their phone session. A read lock over gumble's maps, cheap at fifty a
 // second; WriteAudio takes the connection's own lock separately.
 func (pl *soundPlayer) presserStillThere(job *soundJob, session, channelID uint32, cfg *configuration, overrides map[string]string) bool {
 	there := false
@@ -459,7 +486,7 @@ func (pl *soundPlayer) presserStillThere(job *soundJob, session, channelID uint3
 			return
 		}
 
-		there = voiceNameMatches(user.Name, job.username, overrides, cfg)
+		there = pl.plugin.presser(job.userID, job.username).owns(user, overrides, cfg)
 	})
 
 	return there
@@ -475,7 +502,7 @@ func (pl *soundPlayer) play(job *soundJob) {
 	// THIS read finds: a presser who muted since the press puts nothing on
 	// the wire, and one who moved channel is refused rather than played into
 	// a channel they did not press in, the one they left least of all.
-	read := readVoice(pl.client, job.username, cfg, st.permissions())
+	read := readVoice(pl.client, p.presser(job.userID, job.username), cfg, st.permissions())
 	p.noteSoundRead(read)
 	switch {
 	case read.code == "" && read.channel == nil:
@@ -690,7 +717,7 @@ func (p *Plugin) handleSoundPlay(w http.ResponseWriter, r *http.Request, userID 
 		refuse(soundCodeStore, 0)
 		return
 	}
-	read := readVoice(client, user.Username, cfg, st.permissions())
+	read := readVoice(client, p.presser(userID, user.Username), cfg, st.permissions())
 	p.noteSoundRead(read)
 	if read.code != "" {
 		refuse(read.code, 0)

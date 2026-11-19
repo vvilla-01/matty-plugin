@@ -38,7 +38,7 @@
 
 <h3 align="center">Voice and games</h3>
 
-<p align="center">Mumble, a soundboard, Twitch and Steam. Each off until an admin turns it on.</p>
+<p align="center">Mumble, talking in its channels from Matty, a soundboard, Twitch and Steam. Each off until an admin turns it on.</p>
 
 <br>
 

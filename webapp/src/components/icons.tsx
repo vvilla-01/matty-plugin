@@ -165,6 +165,42 @@ export const HeadphonesIcon: React.FC<IconProps> = ({size = 15}) => (
     </svg>
 );
 
+// The In voice row's marks beside a name: the headphones crossed out for
+// somebody deafened, and the microphone crossed out for somebody muted.
+export const HeadphonesOffIcon: React.FC<IconProps> = ({size = 12}) => (
+    <svg {...base(size)}>
+        <path d='M4 15v-3a8 8 0 0 1 16 0v3'/>
+        <path d='M4 15h2.5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z'/>
+        <path d='M20 15h-2.5a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1H19a1 1 0 0 0 1-1Z'/>
+        <line
+            x1='3'
+            y1='3'
+            x2='21'
+            y2='21'
+        />
+    </svg>
+);
+
+export const MicOffIcon: React.FC<IconProps> = ({size = 12}) => (
+    <svg {...base(size)}>
+        <rect
+            x='9'
+            y='2.5'
+            width='6'
+            height='12'
+            rx='3'
+        />
+        <path d='M5 11a7 7 0 0 0 14 0'/>
+        <path d='M12 18v3.5'/>
+        <line
+            x1='3'
+            y1='3'
+            x2='21'
+            y2='21'
+        />
+    </svg>
+);
+
 // The two category icons, and the only FILLED ones here.
 //
 // Everything else on this page is a stroked outline, which is right for a

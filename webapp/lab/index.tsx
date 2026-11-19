@@ -133,6 +133,7 @@ import {
     RADIO_HANDLE,
     labAdminNews,
     setLabAdminNews,
+    LAB_VOICE_CHANNELS,
 } from './world';
 
 // The lab.
@@ -2069,9 +2070,10 @@ const Controls: React.FC<ControlProps> = ({width, onWidth, showingConsole, onCon
                         aria-pressed={world.voice.some((person) => person.name === name)}
                         disabled={!world.voiceConnected}
                         onClick={() => change((current) => {
+                            const session = 2 + ['Victor', 'Dave', 'Bob', 'Erin'].indexOf(name);
                             current.voice = current.voice.some((person) => person.name === name) ?
                                 current.voice.filter((person) => person.name !== name) :
-                                current.voice.concat({name, userId: `u-${name.toLowerCase()}`});
+                                current.voice.concat({session, name, userId: `u-${name.toLowerCase()}`});
                         })}
                     >{name}</button>
                 ))}
@@ -2082,9 +2084,43 @@ const Controls: React.FC<ControlProps> = ({width, onWidth, showingConsole, onCon
                     disabled={world.voice.length === 0}
                     onClick={() => change((current) => {
                         const muting = !current.voice.some((person) => person.muted);
-                        current.voice = current.voice.map((person) => ({...person, muted: muting}));
+                        current.voice = current.voice.map((person) => ({...person, muted: muting, deaf: muting && person.deaf}));
                     })}
                 >{'muted'}</button>
+                <button
+                    type='button'
+                    className='lab-chip'
+                    aria-pressed={world.voice.some((person) => person.deaf)}
+                    disabled={world.voice.length === 0}
+                    title='Deafened is muted too, with crossed headphones in place of the crossed microphone'
+                    onClick={() => change((current) => {
+                        const deafening = !current.voice.some((person) => person.deaf);
+                        current.voice = current.voice.map((person) => ({...person, deaf: deafening, muted: deafening || person.muted}));
+                    })}
+                >{'deafened'}</button>
+                <button
+                    type='button'
+                    className='lab-chip'
+                    aria-pressed={world.voice.some((person) => (person.channel ?? 0) !== 0)}
+                    disabled={world.voice.length === 0 || world.voiceChannels.length === 0}
+                    title='Everybody in the Lounge, or spread over the channels in turn: Lounge, Gaming, Duo and AFK'
+                    onClick={() => change((current) => {
+                        const spreading = !current.voice.some((person) => (person.channel ?? 0) !== 0);
+                        current.voice = current.voice.map((person, index) => ({
+                            ...person,
+                            channel: spreading ? current.voiceChannels[index % current.voiceChannels.length].id : undefined,
+                        }));
+                    })}
+                >{'spread out'}</button>
+                <button
+                    type='button'
+                    className='lab-chip'
+                    aria-pressed={world.voiceChannels.length === 0}
+                    title='A server before 4.3.0, which sends no channels: one line of names'
+                    onClick={() => change((current) => {
+                        current.voiceChannels = current.voiceChannels.length === 0 ? LAB_VOICE_CHANNELS.slice() : [];
+                    })}
+                >{'no channels'}</button>
                 <button
                     type='button'
                     className='lab-chip'

@@ -15,13 +15,17 @@ import (
 
 // Who is in voice, read from the Mumble server.
 //
-// The plugin holds ONE Mumble client connection, parked wherever the server
-// drops it, and never joins the voice channel. It does not need to: a Mumble
-// client is sent every user connected to the SERVER, not only the ones beside
-// it, so with a single voice channel the roster is simply everybody who is on.
-// It hears nobody: Mumble sends it the audio of anybody who talks in the
+// The plugin holds ONE Mumble client connection for this, parked wherever the
+// server drops it, and it never moves. It does not need to: a Mumble client
+// is sent every channel and every user connected to the SERVER, not only the
+// ones beside it, so the roster is the whole channel tree and everybody in
+// it. It hears nobody: Mumble sends it the audio of anybody who talks in the
 // channel where it is parked (usually the root), and gumble drops that
 // unheard, since no codec is registered to decode it.
+//
+// People who talk from Matty each have a Mumble connection of their own,
+// made by this node for them; the registry of those (voice_phones.go) is
+// how the roster knows which Mattermost account each one is.
 //
 // With the soundboard on (design/3.2.0.md §7), the connection also SENDS
 // audio: the sounds people play, made in their browsers and checked on the
@@ -56,28 +60,62 @@ var errVoiceDialPanicked = errors.New("dialling stopped on an internal error")
 
 // voicePerson is one person in voice, as the panel receives them.
 type voicePerson struct {
+	// Mumble's number for this connection, which is how the voice server
+	// itself tells two people apart while they are connected.
+	Session uint32 `json:"session"`
+
 	Name string `json:"name"`
 
 	// The Mattermost account this is the same person as, when that could be
-	// worked out. The panel uses it to say "you", and to offer the soundboard
-	// to whoever it names. The server never takes it as leave to do anything:
-	// a press is matched again, by the same rule, from Mumble's live state
-	// (sounds_play.go).
+	// worked out: the account that joined, for somebody here through Matty,
+	// else by the name rules below. The panel uses it to say "you", and to
+	// offer the soundboard to whoever it names. The server never takes it as
+	// leave to do anything: a press is matched again, by the same rule, from
+	// Mumble's live state (sounds_play.go).
 	UserID string `json:"userId,omitempty"`
 
+	// The id of the channel they are in. Absent is the root, 0.
+	Channel uint32 `json:"channel,omitempty"`
+
+	// Muted, self muted, deafened, self deafened or suppressed: silent, for
+	// whatever reason.
 	Muted bool `json:"muted,omitempty"`
+
+	// Deafened or self deafened: they hear nobody.
+	Deaf bool `json:"deaf,omitempty"`
+
+	// There through Matty, on a Mumble connection this node holds for them.
+	Phone bool `json:"phone,omitempty"`
+}
+
+// voiceChannel is one channel of the voice server's tree.
+type voiceChannel struct {
+	// Always written, 0 included: 0 is the root.
+	ID   uint32 `json:"id"`
+	Name string `json:"name"`
+
+	// The channel this one is under, 0 included; nil for the root alone.
+	Parent *uint32 `json:"parent,omitempty"`
+
+	// How deep in the tree: 0 for the root, 1 under it, and so on.
+	Depth int `json:"depth"`
+
+	// How many people the channel takes, when it has a limit of its own.
+	Max uint32 `json:"max,omitempty"`
 }
 
 // voiceView is what rides the snapshot. Connected is the honest part: an empty
 // list means nobody is in voice, and that is ONLY true when the plugin is
 // actually connected and in a position to know.
 type voiceView struct {
-	Connected bool          `json:"connected"`
-	People    []voicePerson `json:"people,omitempty"`
+	Connected bool           `json:"connected"`
+	Channels  []voiceChannel `json:"channels,omitempty"`
+	People    []voicePerson  `json:"people,omitempty"`
 }
 
 type voiceState struct {
 	connected bool
+	channels  []voiceChannel
 	people    []voicePerson
 
 	// Why the last attempt failed, for the admin-only notice. Never sent to
@@ -105,7 +143,41 @@ func (p *Plugin) voiceOf(cfg *configuration) *voiceView {
 		return &voiceView{}
 	}
 
-	return &voiceView{Connected: true, People: state.people}
+	return &voiceView{Connected: true, Channels: state.channels, People: state.people}
+}
+
+// What /access says about voice, from 4.3.0, while voice is on.
+const (
+	voiceTalkOn  = "on"
+	voiceTalkOff = "off"
+
+	voiceTalkSwitchedOffText = "Talking from Matty is switched off on this server."
+)
+
+// voiceWord is /access's voice word: whether a Matty may join a voice
+// channel and talk from it here, or why not.
+type voiceWord struct {
+	// Talk is "on" or "off".
+	Talk string `json:"talk"`
+
+	// Reason is why not, while off.
+	Reason string `json:"reason,omitempty"`
+}
+
+// voiceWordNow is /access's voice word, nil (left out) while voice is
+// switched off. It reads nothing from the store: talk is on while its
+// switch is, the voice port is open, the roster connection is connected and
+// Mattermost is not a cluster (voiceTalkUnavailable), else off with why.
+func (p *Plugin) voiceWordNow(cfg *configuration) *voiceWord {
+	if !cfg.EnableVoice {
+		return nil
+	}
+
+	if reason := p.voiceTalkUnavailable(cfg); reason != "" {
+		return &voiceWord{Talk: voiceTalkOff, Reason: reason}
+	}
+
+	return &voiceWord{Talk: voiceTalkOn}
 }
 
 // beginVoiceEpoch marks the start of a connection attempt and returns its
@@ -307,6 +379,12 @@ func (p *Plugin) holdVoiceConnection(ctx context.Context, cfg *configuration) (s
 		UserChange: func(event *gumble.UserChangeEvent) {
 			p.safely("a voice user event", func() { p.publishVoice(event.Client, p.getConfiguration(), epoch) })
 		},
+		// A channel made, removed, renamed, moved, reordered or given another
+		// limit. Changes nobody sees (a description) are dropped by the
+		// comparison in publishVoiceLocked.
+		ChannelChange: func(event *gumble.ChannelChangeEvent) {
+			p.safely("a voice channel event", func() { p.publishVoice(event.Client, p.getConfiguration(), epoch) })
+		},
 		TextMessage: func(event *gumble.TextMessageEvent) {
 			p.safely("a Mumble chat message", func() {
 				if p.currentVoiceEpoch(epoch) {
@@ -338,6 +416,11 @@ func (p *Plugin) holdVoiceConnection(ctx context.Context, cfg *configuration) (s
 		client *gumble.Client
 		err    error
 	}
+
+	// Counted with the phone sessions' connections against the budget that
+	// keeps the voice server's autoban off this node (voice_sessions.go).
+	// The roster connection itself is never refused.
+	p.voiceTalk().noteRosterDial()
 
 	attempt := make(chan dialed, 1)
 	go func() {
@@ -473,14 +556,15 @@ func (p *Plugin) publishVoiceLocked(client *gumble.Client, cfg *configuration, e
 		return
 	}
 
+	channels := voiceChannelsOf(client)
 	people := p.rosterOf(client, cfg)
 
 	previous := p.getVoice()
-	if previous.connected && sameRoster(previous.people, people) {
+	if previous.connected && sameChannels(previous.channels, channels) && sameRoster(previous.people, people) {
 		return
 	}
 
-	p.setVoice(voiceState{connected: true, people: people})
+	p.setVoice(voiceState{connected: true, channels: channels, people: people})
 	p.publishRosterSoon()
 }
 
@@ -513,9 +597,12 @@ func (p *Plugin) rosterOf(client *gumble.Client, cfg *configuration) []voicePers
 	overrides := cfg.voiceNameMap()
 
 	type raw struct {
-		name  string
-		exact string
-		muted bool
+		session uint32
+		name    string
+		exact   string
+		channel uint32
+		muted   bool
+		deaf    bool
 	}
 
 	var found []raw
@@ -523,7 +610,7 @@ func (p *Plugin) rosterOf(client *gumble.Client, cfg *configuration) []voicePers
 	// Under the client's own lock: the read goroutine changes this map as
 	// events arrive, and ranging it without this is a data race.
 	client.Do(func() {
-		for _, user := range client.Users {
+		for session, user := range client.Users {
 			if user == nil {
 				continue
 			}
@@ -533,13 +620,21 @@ func (p *Plugin) rosterOf(client *gumble.Client, cfg *configuration) []voicePers
 				continue
 			}
 
+			var channel uint32
+			if user.Channel != nil {
+				channel = user.Channel.ID
+			}
+
 			// Suppressed too: somebody Mumble will not let speak in their
 			// channel is as silent as somebody muted, and the soundboard
 			// refuses them the same way (§7.15).
 			found = append(found, raw{
-				name:  name,
-				exact: user.Name,
-				muted: user.Muted || user.SelfMuted || user.Deafened || user.SelfDeafened || user.Suppressed,
+				session: session,
+				name:    name,
+				exact:   user.Name,
+				channel: channel,
+				muted:   user.Muted || user.SelfMuted || user.Deafened || user.SelfDeafened || user.Suppressed,
+				deaf:    user.Deafened || user.SelfDeafened,
 			})
 		}
 	})
@@ -555,11 +650,24 @@ func (p *Plugin) rosterOf(client *gumble.Client, cfg *configuration) []voicePers
 			continue
 		}
 
-		people = append(people, voicePerson{
-			Name:   entry.name,
-			UserID: p.voiceUserID(entry.exact, overrides, cfg),
-			Muted:  entry.muted,
-		})
+		person := voicePerson{
+			Session: entry.session,
+			Name:    entry.name,
+			Channel: entry.channel,
+			Muted:   entry.muted,
+			Deaf:    entry.deaf,
+		}
+
+		// Somebody here through Matty is the account that joined, whatever
+		// name the voice server knows them by. Asked before the name rules,
+		// which would match that name to nobody, or to somebody else.
+		if userID, ok := p.voicePhones.userOf(entry.session); ok {
+			person.UserID, person.Phone = userID, true
+		} else {
+			person.UserID = p.voiceUserID(entry.exact, overrides, cfg)
+		}
+
+		people = append(people, person)
 	}
 
 	// A map has no order, and an order that changes every poll would republish
@@ -569,11 +677,109 @@ func (p *Plugin) rosterOf(client *gumble.Client, cfg *configuration) []voicePers
 		if left != right {
 			return left < right
 		}
+		if people[i].Name != people[j].Name {
+			return people[i].Name < people[j].Name
+		}
 
-		return people[i].Name < people[j].Name
+		return people[i].Session < people[j].Session
 	})
 
 	return people
+}
+
+// voiceChannelsOf reads the voice server's channel tree in the order a
+// Mumble client draws it: every channel before the channels under it, and
+// channels beside each other by their position and then by name. A channel
+// whose parent is not in the tree is left out, with everything under it.
+func voiceChannelsOf(client *gumble.Client) []voiceChannel {
+	type raw struct {
+		id       uint32
+		name     string
+		parent   uint32
+		root     bool
+		max      uint32
+		position int32
+	}
+
+	var found []raw
+
+	client.Do(func() {
+		for id, channel := range client.Channels {
+			if channel == nil {
+				continue
+			}
+
+			entry := raw{id: id, name: channel.Name, max: channel.MaxUsers, position: channel.Position}
+			if channel.Parent == nil {
+				entry.root = true
+			} else {
+				entry.parent = channel.Parent.ID
+			}
+			found = append(found, entry)
+		}
+	})
+
+	if len(found) == 0 {
+		return nil
+	}
+
+	// Beside each other: by position, then by name in any case, then by name
+	// exactly, then by id, so that two channels with the same name and place
+	// still come out in the same order every time.
+	sort.Slice(found, func(i, j int) bool {
+		a, b := found[i], found[j]
+		if a.position != b.position {
+			return a.position < b.position
+		}
+		if left, right := strings.ToLower(a.name), strings.ToLower(b.name); left != right {
+			return left < right
+		}
+		if a.name != b.name {
+			return a.name < b.name
+		}
+
+		return a.id < b.id
+	})
+
+	children := map[uint32][]raw{}
+	var roots []raw
+	for _, entry := range found {
+		if entry.root {
+			roots = append(roots, entry)
+		} else {
+			children[entry.parent] = append(children[entry.parent], entry)
+		}
+	}
+
+	channels := make([]voiceChannel, 0, len(found))
+	seen := map[uint32]bool{}
+
+	var walk func(entry raw, depth int)
+	walk = func(entry raw, depth int) {
+		// A tree that loops back on itself is a server telling nonsense:
+		// each channel is listed once, where it was first reached.
+		if seen[entry.id] {
+			return
+		}
+		seen[entry.id] = true
+
+		channel := voiceChannel{ID: entry.id, Name: entry.name, Depth: depth, Max: entry.max}
+		if !entry.root {
+			parent := entry.parent
+			channel.Parent = &parent
+		}
+		channels = append(channels, channel)
+
+		for _, child := range children[entry.id] {
+			walk(child, depth+1)
+		}
+	}
+
+	for _, root := range roots {
+		walk(root, 0)
+	}
+
+	return channels
 }
 
 // voiceUserID matches a Mumble name to a Mattermost account by
@@ -660,6 +866,25 @@ func plainUsername(name string) bool {
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '.', c == '_', c == '-':
 		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+// sameChannels is whether two channel trees would be drawn the same.
+func sameChannels(a, b []voiceChannel) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		left, right := a[i], b[i]
+		if left.ID != right.ID || left.Name != right.Name || left.Depth != right.Depth || left.Max != right.Max {
+			return false
+		}
+		if (left.Parent == nil) != (right.Parent == nil) || (left.Parent != nil && *left.Parent != *right.Parent) {
 			return false
 		}
 	}

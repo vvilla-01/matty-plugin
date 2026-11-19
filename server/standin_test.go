@@ -364,8 +364,15 @@ func TestStandInMumbleIsReadLikeAnyMumble(t *testing.T) {
 			if !p.getVoice().connected || len(got) != len(want) {
 				return false
 			}
+			// The session numbers are the stand-in's to give: each is
+			// there, and is left out of the comparison.
 			for i := range want {
-				if got[i] != want[i] {
+				person := got[i]
+				if person.Session == 0 {
+					return false
+				}
+				person.Session = 0
+				if person != want[i] {
 					return false
 				}
 			}
@@ -374,11 +381,16 @@ func TestStandInMumbleIsReadLikeAnyMumble(t *testing.T) {
 		}, 10*time.Second, 10*time.Millisecond, why)
 	}
 
+	// The stand-in's people are all in its one channel under the root.
 	eventually([]voicePerson{
-		{Name: "Caller"},
-		{Name: "dave", UserID: acDave},
-		{Name: "erin", UserID: acErin, Muted: true},
+		{Name: "Caller", Channel: 1},
+		{Name: "dave", UserID: acDave, Channel: 1},
+		{Name: "erin", UserID: acErin, Channel: 1, Muted: true},
 	}, "everybody on the server, without the plugin's own connection")
+	require.Equal(t, []voiceChannel{
+		{ID: 0, Name: "Root", Depth: 0},
+		{ID: 1, Name: "Voice", Parent: parentOf(0), Depth: 1},
+	}, p.getVoice().channels, "and the channel tree")
 
 	// What the people index says of them, which is what both clients draw.
 	require.Equal(t, map[string]string{acDave: voiceOpen, acErin: voiceMuted}, voiceByUser(p.voiceOf(cfg)))
@@ -386,17 +398,17 @@ func TestStandInMumbleIsReadLikeAnyMumble(t *testing.T) {
 
 	server.Join("dave", proto.Bool(true), nil)
 	eventually([]voicePerson{
-		{Name: "Caller"},
-		{Name: "dave", UserID: acDave, Muted: true},
-		{Name: "erin", UserID: acErin, Muted: true},
+		{Name: "Caller", Channel: 1},
+		{Name: "dave", UserID: acDave, Channel: 1, Muted: true},
+		{Name: "erin", UserID: acErin, Channel: 1, Muted: true},
 	}, "a mute")
 
 	server.Leave("erin")
 	server.Join("bob", nil, nil)
 	eventually([]voicePerson{
-		{Name: "bob"},
-		{Name: "Caller"},
-		{Name: "dave", UserID: acDave, Muted: true},
+		{Name: "bob", Channel: 1},
+		{Name: "Caller", Channel: 1},
+		{Name: "dave", UserID: acDave, Channel: 1, Muted: true},
 	}, "somebody leaving and somebody arriving")
 
 	// Each change asked for a push of the roster.

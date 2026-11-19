@@ -22,7 +22,7 @@ const (
 	// manifestVersion must match the version in plugin.json; build/check-version.py
 	// fails the build if the two drift apart. It is recorded in the airtime
 	// backup so an admin can see which build took the copy.
-	manifestVersion = "4.2.0"
+	manifestVersion = "4.3.0"
 
 	// contractRevision is the number of the client contract this server
 	// speaks (contract/README.md): the routes, events and documents a client
@@ -519,6 +519,28 @@ type Plugin struct {
 	// beside the roster because they share a lifetime exactly.
 	voiceClient *gumble.Client
 
+	// The Mumble sessions this node holds for people talking from Matty, by
+	// session number, which the roster asks who each one is (voice_phones.go).
+	voicePhones voicePhoneRegistry
+
+	// The voice sessions of people talking from Matty, with the budget of
+	// connections to the voice server (voice_sessions.go), made on first use.
+	voiceTalkOnce  sync.Once
+	voiceTalkState *voiceSessions
+
+	// Talking from Matty's UDP port (voice_rtc.go), made on first use, and
+	// the worker that keeps it up (voice_api.go): one restart at a time, the
+	// settings the running one started with, and, for tests, how the
+	// addresses for phones are looked up (nil: the system's resolver).
+	voiceRTCOnce     sync.Once
+	voiceRTCState    *voiceListener
+	voiceTalkRunLock sync.Mutex
+	voiceTalkCancel  context.CancelFunc
+	voiceTalkDone    chan struct{}
+	voiceTalkRanWith *configuration
+	voiceTalkLookup  voiceLookup
+	voiceTalkPasses  atomic.Uint64
+
 	// The bridge's bot account, and the channel it posts into, resolved from
 	// the team/channel an admin typed.
 	bridgeLock sync.RWMutex
@@ -770,6 +792,10 @@ type featureLimiters struct {
 	soundEdit   *rateLimiter
 	soundPress  *rateLimiter
 	soundAudio  *rateLimiter
+
+	// Talking from Matty: joins, and moves and mute changes together.
+	voiceJoin   *rateLimiter
+	voiceChange *rateLimiter
 }
 
 func (p *Plugin) limiters() *featureLimiters {
@@ -781,6 +807,8 @@ func (p *Plugin) limiters() *featureLimiters {
 			soundEdit:   newRateLimiter(30, time.Minute),
 			soundPress:  newRateLimiter(30, time.Minute),
 			soundAudio:  newRateLimiter(60, time.Minute),
+			voiceJoin:   newRateLimiter(6, time.Minute),
+			voiceChange: newRateLimiter(60, time.Minute),
 		}
 	})
 
@@ -898,6 +926,10 @@ func (p *Plugin) usualStarters() []starter {
 		{"the poller", p.restartPoller},
 		{"voice", p.restartVoice},
 
+		// Talking from Matty, after the roster connection whose channels a
+		// join is checked against: the UDP port, while it is switched on.
+		{"voice talk", p.restartVoiceTalk},
+
 		// After the poller, whose first poll reads who has connected Twitch
 		// for itself. Then the purge of anything somebody withdrew, whatever
 		// the switch says: a person's right to have their Twitch data deleted
@@ -1004,6 +1036,10 @@ func (p *Plugin) stopUsual() {
 	// land rather than be cut off half way.
 	p.stopMediaDisk()
 
+	// Every phone told voice is restarting here (it joins again by itself)
+	// and let go, and the voice port closed, before the roster connection
+	// goes.
+	p.stopVoiceTalk()
 	p.stopVoice()
 
 	// Push notifications' senders, waited for; what was queued is lost.
@@ -1163,6 +1199,14 @@ func (p *Plugin) OnConfigurationChange() error {
 			// connection already held. On its own goroutine, because matching
 			// names is a lookup per person and this hook holds up Save.
 			p.goSafely("rebuilding the voice roster", p.republishVoice)
+		}
+
+		// Talking from Matty: switched on or off, another port or other
+		// addresses, another budget, or another voice server under it,
+		// whose sessions end. On its own goroutine: it may wait for phones
+		// to be told, and this hook holds up Save.
+		if !sameVoiceTalk(previous, &cfg) || !sameMumbleConnection(previous, &cfg) {
+			p.goSafely("restarting talking from Matty", p.restartVoiceTalk)
 		}
 
 		// Renaming the bot is a write to Mattermost, so it only happens when

@@ -2,6 +2,38 @@
 
 # Upgrading
 
+## Upgrading to 4.3.0
+
+4.3.0 shows the Mumble server's channels, and lets people **talk in them from the Matty app**:
+Matty lists the channels in a team's channel list, as Discord lists its voice channels, and people
+who may watch join one and talk from their phone, through this server. Talking is off until an
+admin switches it on, and nothing else changes.
+
+- **The panel's voice row is grouped by channel**, with deafened people marked, whatever the new
+  switch says. See [Who is in voice](voice.md#who-is-in-voice).
+- **New in the Mumble section**: **Let people talk from Matty** (off), **Voice port (UDP)** (8445),
+  **Address for phones**, **The voice server's autoban is off** (off), and **Talking from Matty**, a
+  card of how it stands. See [Talking from Matty](voice.md#talking-from-matty).
+- **Switching it on opens a UDP port** on the Mattermost server, which the firewall must let phones
+  reach, and needs the address phones reach this server at: the Site URL's host unless you set one.
+  See [What the plugin touches](../LOCKDOWN.md#what-the-plugin-touches). It works on a single
+  Mattermost server only, not in a cluster.
+- **With it on, the server opens one more Mumble connection for each person talking**, named after
+  their username with " (Matty)" after it, at most 8 in any two minutes, so that a Mumble server as
+  it comes does not ban this server's address. See
+  [The autoban, and the two ways round it](voice.md#the-autoban-and-the-two-ways-round-it).
+- **The Matty app needs 0.1.31 or newer** to show the channels and talk. Every Matty from 0.1.27
+  goes on working as it did.
+- **No contract change.** It is an addition to revision 4: the snapshot's `voice` object gains
+  `channels` and, for each person, `session`, `channel`, `deaf` and `phone`; `GET /access` gains
+  `voice`; and there are the `/voice` routes, the data channel `voice`, `GET /admin/voice` and
+  `voiceTalkAlert` in a system admin's `GET /me` (`contract/README.md`, "Voice"). It works with
+  Matty 0.1.28 to 0.1.31.
+- **Nothing to move.** Upgrade as usual, with `ceo.villa.matty-4.3.0-linux-amd64.tar.gz`.
+- **Going back to 4.2.0** ends everybody's talking from Matty; the settings stay, unused.
+- **Coming from 4.1.1 or earlier?** Read [Upgrading to 4.2.0](#upgrading-to-420) as well, and on
+  back to the version you are coming from.
+
 ## Upgrading to 4.2.0
 
 4.2.0 no longer takes over from VillaNET, the plugin Matty Plugin was before 4.0.0. Nothing else

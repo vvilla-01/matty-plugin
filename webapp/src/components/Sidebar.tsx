@@ -1521,10 +1521,7 @@ export const Sidebar: React.FC<Props> = ({access, onRoot, accessUnchecked}) => {
                     show={inVoice}
                     label='In voice'
                 >
-                    <VoiceStrip
-                        people={snapshot.voice?.people}
-                        connected={snapshot.voice?.connected}
-                    />
+                    <VoiceStrip voice={snapshot.voice}/>
                 </Reveal>
 
                 {/* Directly under In voice, its twin, and like it nothing at

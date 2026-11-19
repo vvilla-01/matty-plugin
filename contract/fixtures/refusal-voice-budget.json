@@ -1,0 +1,5 @@
+{
+  "error": "Too many people joined voice just now. Try again in a moment.",
+  "code": "unavailable",
+  "retryAfterMs": 120000
+}

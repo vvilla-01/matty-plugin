@@ -75,10 +75,13 @@ var appCheckExempt = map[string]bool{
 }
 
 // appCheckExemptRequest is whether a request is one a Matty that has not
-// passed may still make: an exempt route, or taking its own push
-// registration back (DELETE /me/push), which always works.
+// passed may still make: an exempt route, or one of the takebacks that always
+// work, its own push registration (DELETE /me/push) and leaving voice (POST
+// /voice/leave).
 func appCheckExemptRequest(r *http.Request) bool {
-	return appCheckExempt[r.URL.Path] || (r.Method == http.MethodDelete && r.URL.Path == mePushPath)
+	return appCheckExempt[r.URL.Path] ||
+		(r.Method == http.MethodDelete && r.URL.Path == mePushPath) ||
+		(r.Method == http.MethodPost && r.URL.Path == voiceLeavePath)
 }
 
 // appWord is what /access and /me say about the caller's session.

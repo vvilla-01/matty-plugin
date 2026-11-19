@@ -1,0 +1,13 @@
+{
+  "on": true,
+  "connected": true,
+  "port": 8445,
+  "open": true,
+  "addresses": [
+    "203.0.113.7"
+  ],
+  "talking": 1,
+  "noBudget": false,
+  "refused": "The voice server did not let you into that channel.",
+  "refusedAt": 1795392000000
+}

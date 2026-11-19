@@ -245,6 +245,30 @@ export type AdminPush = {
 
 export const fetchAdminPush = (): Promise<AdminPush> => requestJSON<AdminPush>('/api/v1/admin/push');
 
+// GET /api/v1/admin/voice, for system admins (server/voice_api.go
+// voiceAdminView): talking from Matty on the server that answers. on is the
+// switch with a voice server set; connected, whether the voice server is;
+// port, open and addresses, the UDP port, whether it answers phones, and
+// what phones are told to reach; problem, the server's sentence for why it
+// does not; talking, how many people talk from Matty through it now;
+// noBudget, whether the plugin's own limit of connections to the voice
+// server is lifted; refused and refusedAt (ms), the voice server's last
+// refusal of somebody joining from Matty. Never who.
+export type AdminVoice = {
+    on: boolean;
+    connected: boolean;
+    port: number;
+    open: boolean;
+    addresses: string[];
+    problem?: string;
+    talking: number;
+    noBudget: boolean;
+    refused?: string;
+    refusedAt?: number;
+};
+
+export const fetchAdminVoice = (): Promise<AdminVoice> => requestJSON<AdminVoice>('/api/v1/admin/voice');
+
 // A read the server can answer with "you already have it" (contract duty 6).
 // tag is the tag the copy in hand came under: this route's ETag, or, for the
 // snapshot, the tag its push carried, in quotes. null comes back when that

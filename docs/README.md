@@ -23,7 +23,7 @@ with a name of its own, that name stands there instead.
 3. [Unlocking and streaming](unlocking.md): The lock screen and the bearer token, the red dot, stream notes, and hashtags and @names in titles.
 4. [The panel](panel.md): The bar at the bottom, Live now, clips, the player, threads, and how the panel looks.
 5. [Up next, Twitch, Steam and Hytale](up-next.md): Planning streams, movie and game lookups, and the optional Twitch, Steam and Hytale connections.
-6. [Voice and birthdays](voice.md): Who is in Mumble, the soundboard, Mumble chat in a channel, and birthdays.
+6. [Voice and birthdays](voice.md): Who is in Mumble, talking in its channels from Matty, the soundboard, Mumble chat in a channel, and birthdays.
 7. [Airtime and awards](awards.md): Airtime and medals, Top Snoopers, awards, biggest fans and achievements.
 8. [Push notifications](push.md): Notifications on phones through a UnifiedPush app, without Matty staying connected: switching them on, what is sent where, your own push server, the status card, a lost phone, and when pushes do not arrive.
 9. [Building and how it works](building.md): Building from source, signing a release, how the plugin works, and the API that Matty uses.
