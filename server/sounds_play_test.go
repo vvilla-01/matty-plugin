@@ -71,6 +71,10 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 		// The first person is a phone session of this node's, the
 		// account's that joined from Matty.
 		phoneOf string
+
+		// The channels the roster shows (Channels to show), nil for every
+		// one.
+		shown map[uint32]bool
 	}{
 		"in, and free to speak": {users: []*gumble.User{{Name: "Craig"}}, code: "", in: true},
 		"not in Mumble":         {users: []*gumble.User{{Name: "Bob"}}, code: soundCodeNotInVoice},
@@ -136,6 +140,23 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 			users: []*gumble.User{{Name: "craig (Matty)"}, {Name: "craig"}}, phoneOf: "uid-craig",
 			code: soundCodeTwoSessions, in: true,
 		},
+		"in a channel the roster does not show": {
+			users: []*gumble.User{{Name: "craig"}}, shown: map[uint32]bool{0: true},
+			code: soundCodeNotInVoice,
+		},
+		"in a channel the roster shows": {
+			users: []*gumble.User{{Name: "craig"}}, shown: map[uint32]bool{7: true},
+			code: "", in: true,
+		},
+		"twice, once in a channel the roster does not show": {
+			users: []*gumble.User{{Name: "craig"}, {Name: "Craig_laptop"}},
+			tweak: func(cfg *configuration, client *gumble.Client) {
+				cfg.VoiceNameMap = "Craig_laptop = craig"
+				client.Users[3].Channel = client.Self.Channel
+			},
+			shown: map[uint32]bool{7: true},
+			code:  "", in: true,
+		},
 		"VillaNET deafened": {
 			users: []*gumble.User{{Name: "craig"}},
 			tweak: func(_ *configuration, client *gumble.Client) { client.Self.SelfDeafened = true },
@@ -148,7 +169,7 @@ func TestEveryPressOutcomeIsReadFromMumble(t *testing.T) {
 			row.tweak(&next, client)
 		}
 
-		presser := voicePresser{userID: "uid-craig", username: "craig", phones: &voicePhoneRegistry{}}
+		presser := voicePresser{userID: "uid-craig", username: "craig", phones: &voicePhoneRegistry{}, shown: row.shown}
 		if row.phoneOf != "" {
 			presser.phones.put(row.users[0].Session, row.phoneOf)
 		}
@@ -820,4 +841,48 @@ func TestAConnectionEndingStopsThePlayer(t *testing.T) {
 
 	waitForGate(t, s)
 	requireRefused(t, s.press(full, sceneLinkedAdmin), http.StatusServiceUnavailable, soundCodeBotOffline, "and nothing more plays")
+}
+
+// Channels to show reaches the soundboard through the presser the press
+// route builds: a press from a channel it leaves out is refused as one from
+// somebody not in voice.
+func TestAPressFromAChannelNotShownIsRefused(t *testing.T) {
+	s, _ := liveSoundScene(t)
+	tone := s.addedFrom(t, sceneLinked, "tone1s")
+
+	cfg := s.p.getConfiguration().Clone()
+	cfg.VoiceChannelsShown = "Games"
+	s.p.setConfiguration(cfg)
+	s.p.republishVoice()
+	require.Eventually(t, func() bool { return len(s.p.getVoice().channels) == 1 }, 5*time.Second, 5*time.Millisecond)
+
+	recorder := s.press(tone, sceneLinked)
+	requireRefused(t, recorder, http.StatusForbidden, soundCodeNotInVoice, "Dave is in Lounge, which is not shown")
+}
+
+// A Save that leaves out the presser's channel while a sound plays there
+// ends the sound, with its last packet marked as the last.
+func TestASoundEndsWhenItsChannelStopsBeingShown(t *testing.T) {
+	s, server := liveSoundScene(t)
+	tone := s.addedFrom(t, sceneLinked, "tone1s")
+
+	server.set(func(f *fakeMumble) {
+		f.onFrame = func(frame mumbleFrame, audio int) {
+			if frame.kind == 1 && audio == 30 {
+				go func() {
+					cfg := s.p.getConfiguration().Clone()
+					cfg.VoiceChannelsShown = "Games"
+					s.p.setConfiguration(cfg)
+					s.p.republishVoice()
+				}()
+			}
+		}
+	})
+
+	played(t, s.press(tone, sceneLinked))
+	waitForGate(t, s)
+	packets := server.audio()
+	require.NotEmpty(t, packets)
+	require.Less(t, len(packets), 51, "cut short")
+	require.True(t, packets[len(packets)-1].final)
 }

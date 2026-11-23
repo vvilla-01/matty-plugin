@@ -15,8 +15,9 @@
 #                      soundboard (build/check-sounds.mjs), @names in
 #                      titles (build/check-mentions.mjs), the clip
 #                      player (build/check-player.mjs), the panel's
-#                      reads of the server (build/check-reads.mjs) and the
-#                      In voice row (build/check-voice.mjs)
+#                      reads of the server (build/check-reads.mjs), the
+#                      In voice row (build/check-voice.mjs) and the
+#                      Updates card (build/check-update.mjs)
 #   make e2e           the real-time WebRTC tests, which make check leaves out;
 #                      make e2e E2EFLAGS=-race runs them under the race detector
 #   make fakebb        build build/fakebb/fakebb, a stand-in for Broadcast Box
@@ -153,6 +154,7 @@ check-webapp:
 	node build/check-player.mjs
 	node build/check-reads.mjs
 	node build/check-voice.mjs
+	node build/check-update.mjs
 
 # Real WebRTC in real time, which under the race detector is flaky rather than
 # wrong, so it is not part of check. Each such test skips itself unless

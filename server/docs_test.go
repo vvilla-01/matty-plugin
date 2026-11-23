@@ -16,28 +16,32 @@ import (
 // §10). 3.4.0 adds two more exceptions, Steam and Hytale, each with a browser
 // of its own going there to sign in (design/3.4.0.md §7). With push
 // notifications on, the server also posts to the UnifiedPush push servers
-// people's phones name (docs/push.md): a fourth. Every change is to be stated
-// honestly everywhere, so every sentence that promises nobody is contacted
-// must name all four, or be on the short list below with the reason it stays
-// true as it is. A count of the cases ("in exactly two cases") is such a
+// people's phones name (docs/push.md): a fourth. With Look for updates on, the
+// server asks GitHub for the plugin's newest release (docs/updates.md): a
+// fifth. Every change is to be stated honestly everywhere, so every sentence
+// that promises nobody is contacted must name all five, or be on the short
+// list below with the reason it stays true as it is. A count of the cases ("in exactly two cases") is such a
 // promise too: one that leaves a service out is the same mistake in a number.
 
 // noOutsideContact is the shape of such a promise. "Only outside
 // connections" is here because the Mumble setting's help text says it in
 // those words, and an early 3.4.0 build left that sentence naming Twitch alone.
-var noOutsideContact = regexp.MustCompile(`(?i)never contact|no outside requests|no external network requests|only outbound connection|only outside connections?|talks? only to this server|in exactly \w+ cases`)
+// "Contacts besides" is the list in the security chapter, which once left
+// GitHub out. "Other outbound connections" is a list of them too, in the
+// pop-out link's chapter.
+var noOutsideContact = regexp.MustCompile(`(?i)never contact|no outside requests|no external network requests|only outbound connection|only outside connections?|other outbound connections?|talks? only to this server|in exactly \w+ cases|contacts? besides`)
 
 // noOutsideContactExceptions are what every such promise must name.
-var noOutsideContactExceptions = []string{"Twitch", "Steam", "Hytale", "UnifiedPush"}
+var noOutsideContactExceptions = []string{"Twitch", "Steam", "Hytale", "UnifiedPush", "GitHub"}
 
 // noOutsideContactExempt are the promises that stay true with Twitch, Steam,
-// Hytale and push notifications on, each with why.
+// Hytale, push notifications and plugin updates on, each with why.
 var noOutsideContactExempt = map[string]string{
-	"Browsers never contact Broadcast Box at all": "about Broadcast Box only, which none of the four changes",
+	"Browsers never contact Broadcast Box at all": "about Broadcast Box only, which none of the five changes",
 }
 
-// namesEveryException is whether a sentence names Twitch, Steam, Hytale and
-// UnifiedPush.
+// namesEveryException is whether a sentence names Twitch, Steam, Hytale,
+// UnifiedPush and GitHub.
 // documents is every document a reader is given: the front page, the manual
 // (each chapter in docs/, so a chapter added later is read too) and LOCKDOWN.md.
 func documents(t *testing.T) []string {
@@ -109,7 +113,7 @@ func TestEveryNoOutsideContactPromiseNamesEveryException(t *testing.T) {
 			for phrase := range noOutsideContactExempt {
 				exempt = exempt || strings.Contains(sentence, phrase)
 			}
-			require.True(t, exempt, "this promise is not true with Twitch, Steam, Hytale and push notifications on, and does not name all four: %q", sentence)
+			require.True(t, exempt, "this promise is not true with Twitch, Steam, Hytale, push notifications and plugin updates on, and does not name all five: %q", sentence)
 		}
 	}
 }
@@ -124,6 +128,7 @@ func TestTheNoOutsideContactPatternKnowsEveryWording(t *testing.T) {
 		"Besides Broadcast Box, this, the title lookups and **Show people live on Twitch** are the only outside connections VillaNET makes.",
 		"The browser talks only to this server.",
 		"A browser leaves this server in exactly four cases.",
+		"**What the server contacts besides Broadcast Box**, each only when an admin has switched it on: the Mumble server.",
 	} {
 		require.True(t, noOutsideContact.MatchString(sentence), "the pattern misses %q", sentence)
 	}
@@ -158,7 +163,7 @@ func TestEverySettingPromiseOfNoOutsideContactNamesEveryException(t *testing.T) 
 	for _, text := range texts {
 		for _, sentence := range sentencesOf(text) {
 			if noOutsideContact.MatchString(sentence) {
-				require.True(t, namesEveryException(sentence), "this promise does not name Twitch, Steam, Hytale and UnifiedPush: %q", sentence)
+				require.True(t, namesEveryException(sentence), "this promise does not name Twitch, Steam, Hytale, UnifiedPush and GitHub: %q", sentence)
 			}
 		}
 	}

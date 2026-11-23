@@ -32,8 +32,8 @@ channel. See [Soundboard](#soundboard).
 This connection, and the one more for each person [talking from Matty](#talking-from-matty), to the
 same Mumble server, are the plugin's only outbound connections besides Broadcast Box itself — and,
 only if an admin switches them on, the title lookups (TMDB, Steam and IGDB), Twitch live (Twitch),
-Steam status (Steam), Hytale names (Hytale) and UnifiedPush [push notifications](push.md), to the
-push servers people's phones name.
+Steam status (Steam), Hytale names (Hytale), the plugin's updates (GitHub) and UnifiedPush
+[push notifications](push.md), to the push servers people's phones name.
 
 **Not built on Matterbridge**, which was the obvious idea and does not work. Its Mumble side turns
 arrivals and departures into prose chat messages — *"Alice joined"* — for the one channel it sits
@@ -71,6 +71,58 @@ row on an evening when four people are in there is worse than no row at all.
   Mumble server under a name the plugin chose for them, `alice (Matty)`, and the roster shows them as
   the account that joined, with a phone mark, whatever the name rules say.
 
+### Showing only some channels
+
+**Channels to show** (System Console > Plugins > Matty > Mumble) lists the Mumble channels Matty
+and the panel are told of, one a line, names compared without regard to case. A line is either:
+
+- a name, such as `Lobby`: every channel of that name, wherever it is in the tree. The root is
+  named by its own name. Two channels called Lobby, one at the top and one under Staff, are both
+  shown by `Lobby`.
+- a path from below the root with `/` between the names, such as `Gaming/Duo` for the Duo under
+  Gaming: that channel alone. A `/` at the start makes a single name a path, so `/Lobby` is the
+  Lobby right under the root and not the one under Staff; a `/` at the end is left out. A path
+  never names the root, so `Root/Lobby` names nothing; write `/Lobby`.
+
+A channel whose own name holds a `/` is named by no line, as each `/` of a line parts two names: it
+is shown only through a listed channel above it.
+
+A channel listed brings every channel under it. Blank, as it comes, is every channel. Only the
+first 200 lines are used, and a line longer than 256 characters is not used at all, so it shows
+nothing; when no line is used, no channel is shown.
+
+With lines in it:
+
+- The panel's row and the app's channel list hold only those channels, in Mumble's order. A
+  channel listed under one that is not shown stands on its own, with nothing above it.
+- Somebody in any other channel is not in voice as far as Matty and the panel are told: not in the
+  row, not in the app's list, and no headphones by their name.
+- Nobody can join one of the other channels from Matty or move there: the app is told "That voice
+  channel does not exist." Somebody talking from Matty whom a Mumble admin moves into one stays
+  connected, and the app, which is not told that channel's name, calls it Voice. The app joining
+  again there, as it does after a network change, is not refused while the session still waits
+  for it, 45 seconds after the phone's connection went; after that the channel is refused like any
+  other that is not shown, and voice stops.
+- The soundboard goes by the same channels. It is not offered to somebody in a channel that is not
+  shown, it never plays into one, and a press from one is refused as from somebody not in Mumble
+  ("Join Mumble to add or change sounds."). A sound stops if the presser's channel stops being
+  shown while it plays.
+
+Channels to show covers the voice roster, joining and moving from Matty, and the soundboard. The
+[Mumble chat bridge](#mumble-chat-in-the-same-channel) has a switch of its own and is not
+filtered: it relays the chat that reaches the plugin's own Mumble connection, the chat of the
+channel that connection sits in, by the sender's Mumble name, whether that channel is shown or not.
+
+A change to the setting is shown as soon as it is saved. The **Talking from Matty** card at the end
+of the section quotes the lines that match no channel on the Mumble server, so a typing mistake is
+seen there, and each line that matches more than one channel, with the paths of the channels it
+matched (five at the most, then how many more). Each path is written as a line would name that
+channel alone: `/Lobby` for a channel right under the root, `Gaming/Duo` deeper, and the root as
+`Lobby (the root)`. The card also says which lines are not used, whether the Mumble server is
+connected or not: each line longer than 256 characters by its first 40 characters (five at the
+most, then how many more), and how many lines come after the 200th ("Only the first 200 lines of
+Channels to show are used; 3 more are not.").
+
 ### What the connection costs you
 
 Mumble servers use a self-signed certificate as a matter of course — the desktop client trusts them
@@ -103,7 +155,8 @@ mixed, recorded or kept.
 ### What it needs
 
 - **Show who is in voice**, on and connected: a join is checked against the channels its connection
-  sees, and talk is off while it is not connected.
+  sees and [Channels to show](#showing-only-some-channels) lets through, and talk is off while it
+  is not connected.
 - **One UDP port**, **Voice port (UDP)**, 8445 unless you change it, open to phones on the Mattermost
   server, for UDP. Every phone uses that same port. Behind a router, forward it to the Mattermost
   server, UDP, with the same number.
@@ -178,6 +231,33 @@ and a Mumble admin can move, mute, kick or ban them as anybody else; the app is 
 loses its connection (a tunnel, a lift, a network change) leaves its Mumble connection in place,
 deafened, for 45 seconds, for the phone to come back to; then it goes.
 
+### Mute, deafen, and the Mumble server's limit
+
+A connection's moves, mutes and deafens are its own state messages, and the Mumble server takes
+those only so fast, as its settings file has it: `messageburst` (5) at once, then `messagelimit`
+(1) a second. It drops the rest without a word. So the plugin keeps, for each person, what they
+want and what the Mumble server last said, and:
+
+- sends a message only while the two differ, never one that would change nothing, and only the
+  newest wish, so a run of quick taps costs one or two messages;
+- sends a move and the mute and deafen in messages of their own, the move first, and any two
+  messages at least a second apart, the pace the Mumble server allows as it comes;
+- sends the same message again when the Mumble server's word has not followed within two
+  seconds, for as long as they differ;
+- stops the person's voice at once when they mute or deafen, and after an unmute lets it go up,
+  and shows them as talking, only once the Mumble server says they are unmuted;
+- tells the app what the Mumble server holds, so that Matty 0.1.32 and later shows the person
+  muted while the Mumble server has them muted, from two seconds after their last tap, whatever
+  was tapped.
+
+`POST /voice/state` answers at once with what was asked, and so does `POST /voice/join` for the
+mute and deafen. A join or a move that changes the channel waits for that message's turn, so it
+can take up to a second longer than the Mumble server's answer alone. A tap that asks again for
+what the person already asked, while the Mumble server still holds otherwise, sends it again in
+the next turn. The Mumble server's own settings file (`mumble-server.ini` or `murmur.ini`) needs
+no change for this. With `messageburst` or `messagelimit` set lower than they come, it drops more,
+and the plugin keeps sending again every two seconds until its word follows.
+
 The voice goes up only while the person is talking, as Mumble's own voice activation does: from a
 packet the phone marks as loud enough (its audio level, which the phone measures), until 400 ms
 after the last one, so that a phone in a quiet room does not light up as talking all evening.
@@ -217,16 +297,19 @@ nobody. Leave it off while the Mumble server bans as it comes.
 - A session ends when the person leaves, when Mumble kicks or bans them or the connection to it is
   lost, when they join again from another phone, when talk is switched off or the Mumble settings
   change, when they may no longer watch, when the Mattermost session they joined from signs out
-  (looked at once a minute), and when the plugin stops, restarts or is upgraded ("Voice is
-  restarting on this server.", after which the app joins again by itself). The app is told which,
-  in a sentence.
+  (looked at once a minute), when a [minimum Matty version](security.md#a-minimum-matty-version)
+  their Matty does not meet comes into force, and when the plugin stops, restarts or is upgraded
+  ("Voice is restarting on this server.", after which the app joins again by itself). The app is
+  told which, in a sentence.
 
 ### The card and the alert
 
 **Talking from Matty**, at the end of the Mumble section, shows whether the voice port is open and
 the addresses phones are given, or why not; whether the Mumble server is connected; how many people
 are talking from Matty through this server now (never who); whether the autoban is marked as off;
-and the Mumble server's last refusal of somebody joining, with when. While talk is switched on and
+the Mumble server's last refusal of somebody joining, with when; and, whether talk is on or not,
+the lines of **Channels to show** that match no channel, and the ones that match more than one,
+with those channels (five of each at the most, then how many more). While talk is switched on and
 the port is down, system admins also see why in the panel.
 
 ## Soundboard
@@ -247,7 +330,8 @@ sees it come and go, and shouts the sound into your channel from there.
 - **One shared board.** Everybody it is for sees and plays every sound on it, oldest first, so tiles
   never move under anybody's finger; a new one goes at the end.
 - **Only for people in Mumble.** The speaker is there only while you are; the server sends the board
-  only to somebody linked whom it finds in Mumble at that moment, and refuses adding and renaming to
+  only to somebody linked whom it finds in Mumble at that moment, in a channel that
+  [Channels to show](#showing-only-some-channels) lets through, and refuses adding and renaming to
   anybody else. Let-in and locked readers never see any of it.
 - **Muted means off.** While you are muted, deafened, or not allowed to speak in your channel, the
   tiles are grey and do nothing, and the sheet says why ("You’re muted in Mumble. Unmute to play

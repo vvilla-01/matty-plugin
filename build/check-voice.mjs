@@ -39,6 +39,18 @@ const names = (groups) => groups.map((group) => [group.channel ? group.channel.n
     ]);
 }
 
+// Channels to show (contract/fixtures/voice-shown.json): only the channels
+// an admin listed and those under them, a listed channel under one that is
+// not shown a top of its own, and nobody from the channels left out.
+{
+    const shown = JSON.parse(readFileSync(new URL('../contract/fixtures/voice-shown.json', import.meta.url), 'utf8'));
+    assert.deepEqual(names(voice.voiceGroups(shown.voice)), [
+        ['Gaming', ['dave (Matty)']],
+        ['Duo', ['Bob']],
+        ['Lobby', ['Victor']],
+    ]);
+}
+
 const channels = [
     {id: 0, name: 'Lounge', depth: 0},
     {id: 1, name: 'Gaming', parent: 0, depth: 1},
@@ -84,7 +96,7 @@ assert.equal(voice.voicePersonLabel({name: 'Bob', muted: true, deaf: true}), 'Bo
 assert.equal(voice.voicePersonLabel({name: 'Dave', muted: true}), 'Dave, muted');
 assert.equal(voice.voicePersonLabel({name: 'Victor', phone: true}), 'Victor');
 
-console.log('check-voice: the In voice row by channel, its order and its marks hold');
+console.log('check-voice: the In voice row by channel, its order, its marks and the channels shown hold');
 
 // Talking from Matty's card in the System Console and its alert in the
 // panel (webapp/src/voiceAdmin.ts), from what the server sends: the
@@ -123,6 +135,56 @@ console.log('check-voice: the In voice row by channel, its order and its marks h
     assert.deepEqual(texts({...base, open: false, addresses: []})[0], ['quiet', 'The voice port 8445 is not open yet. Refresh in a moment.']);
     assert.deepEqual(texts({...base, on: false}), [['plain', 'Talking from Matty is off: the app shows who is in voice, and nobody can join a channel from it.']]);
 
+    // The lines of Channels to show that name no channel, quoted as the
+    // admin wrote them, whether talk is on or not.
+    assert.deepEqual(texts({...base, unmatched: ['Gamng']}).at(-1), ['error', '“Gamng” in Channels to show matches no channel on the voice server.']);
+    assert.deepEqual(texts({...base, unmatched: ['Gamng', 'Lobby/Duo', 'AFK']}).at(-1),
+        ['error', '“Gamng”, “Lobby/Duo” and “AFK” in Channels to show match no channel on the voice server.']);
+    assert.deepEqual(texts({...base, on: false, unmatched: ['Gamng']}), [
+        ['plain', 'Talking from Matty is off: the app shows who is in voice, and nobody can join a channel from it.'],
+        ['error', '“Gamng” in Channels to show matches no channel on the voice server.'],
+    ]);
+    assert.equal(texts({...base, unmatched: []}).length, texts(base).length, 'nothing to say when every line names a channel');
+    assert.deepEqual(texts({...base, unmatched: ['A', 'B', 'C', 'D', 'E', 'F', 'G']}).at(-1),
+        ['error', '“A”, “B”, “C”, “D”, “E” and 2 more in Channels to show match no channel on the voice server.'], 'five quoted, the rest counted');
+
+    // The lines that name more than one channel, with the channels they
+    // name: five channels at most, then a count; five lines at most, then a
+    // count.
+    assert.deepEqual(texts({...base, several: [{line: 'Lobby', paths: ['Lobby (the root)', '/Lobby', 'Staff/Lobby']}]}).at(-1),
+        ['quiet', '“Lobby” in Channels to show matches more than one channel: Lobby (the root), /Lobby and Staff/Lobby.']);
+    const rooms = ['/Room', 'Room/Room', 'Room/Room/Room', 'Room/Room/Room/Room', 'Room/Room/Room/Room/Room'];
+    assert.deepEqual(texts({...base, several: [{line: 'room', paths: rooms, more: 2}]}).at(-1),
+        ['quiet', '“room” in Channels to show matches more than one channel: /Room, Room/Room, Room/Room/Room, Room/Room/Room/Room, Room/Room/Room/Room/Room and 2 more.']);
+    const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((line) => ({line, paths: [`/${line}`, `Staff/${line}`]}));
+    const manyTexts = texts({...base, unmatched: ['Gamng'], several: many});
+    assert.deepEqual(manyTexts.slice(-7).map(([tone]) => tone), ['error', 'quiet', 'quiet', 'quiet', 'quiet', 'quiet', 'quiet']);
+    assert.deepEqual(manyTexts.at(-1), ['quiet', '2 more lines in Channels to show match more than one channel.']);
+    assert.deepEqual(texts({...base, on: false, several: [{line: 'Lobby', paths: ['/Lobby', 'Staff/Lobby']}]}).at(-1),
+        ['quiet', '“Lobby” in Channels to show matches more than one channel: /Lobby and Staff/Lobby.'], 'whether talk is on or not');
+
+    // The lines that are not used: too long, five quoted and the rest
+    // counted, and the lines after the 200th; whether talk is on or not,
+    // after the lines that name nothing and before the ones that name more
+    // than one.
+    const cut = 'Gaming/Gaming/Gaming/Gaming/Gaming/Gamin…';
+    assert.deepEqual(texts({...base, tooLong: [cut]}).at(-1), ['error', `“${cut}” in Channels to show is longer than 256 characters, so it is not used.`]);
+    assert.deepEqual(texts({...base, tooLong: ['A…', 'B…']}).at(-1), ['error', '“A…” and “B…” in Channels to show are longer than 256 characters, so they are not used.']);
+    assert.deepEqual(texts({...base, tooLong: ['A…', 'B…', 'C…', 'D…', 'E…', 'F…', 'G…']}).at(-1),
+        ['error', '“A…”, “B…”, “C…”, “D…”, “E…” and 2 more in Channels to show are longer than 256 characters, so they are not used.']);
+    assert.deepEqual(texts({...base, dropped: 1}).at(-1), ['error', 'Only the first 200 lines of Channels to show are used; 1 more is not.']);
+    assert.deepEqual(texts({...base, on: false, dropped: 37}), [
+        ['plain', 'Talking from Matty is off: the app shows who is in voice, and nobody can join a channel from it.'],
+        ['error', 'Only the first 200 lines of Channels to show are used; 37 more are not.'],
+    ]);
+    assert.deepEqual(texts({...base, unmatched: ['Gamng'], tooLong: [cut], dropped: 2, several: [{line: 'Lobby', paths: ['/Lobby', 'Staff/Lobby']}]}).slice(-4).map(([tone, text]) => [tone, text.slice(0, 12)]), [
+        ['error', '“Gamng” in C'],
+        ['error', `“${cut.slice(0, 11)}`],
+        ['error', 'Only the fir'],
+        ['quiet', '“Lobby” in C'],
+    ]);
+    assert.equal(texts({...base, tooLong: [], dropped: 0}).length, texts(base).length, 'nothing to say when every line is used');
+
     assert.equal(admin.voiceTalkAlertText(undefined), '');
     assert.equal(admin.voiceTalkAlertText(' '), '');
     assert.equal(admin.voiceTalkAlertText('The voice port 8445 (UDP) could not be opened: bind: address already in use'),
@@ -135,6 +197,9 @@ console.log('check-voice: the In voice row by channel, its order and its marks h
     assert.equal(section.title, admin.VOICE_SECTION);
     const status = section.settings.find((setting) => setting.key === 'VoiceTalkStatus');
     assert.equal(status.type, 'custom');
+    const channelsShown = section.settings.find((setting) => setting.key === 'VoiceChannelsShown');
+    assert.equal(channelsShown.display_name, admin.VOICE_CHANNELS_SETTING);
+    assert.equal(channelsShown.type, 'longtext');
     const registry = readFileSync(new URL('../webapp/src/adminSettings.ts', import.meta.url), 'utf8');
     assert.match(registry, /\{key: 'voicetalkstatus', component: AdminVoice, showTitle: true\}/);
 }

@@ -841,7 +841,7 @@ function starting(): World {
             // (the Server name and Artwork rows switch them).
             name: 'Matty',
             artwork: {emblem: false, ghost: false},
-            release: {state: 'unsigned', version: '4.0.0'},
+            release: {state: 'unsigned', version: '4.4.0'},
             app: {check: 'report', state: 'none'},
 
             // Often, in the lab, so a ghost is seen without waiting for one
@@ -1469,7 +1469,7 @@ const LAB_MANIFEST = [
     'matty-release-manifest 1',
     `product ${PLUGIN_ID}`,
     'kind plugin',
-    'version 4.0.0',
+    'version 4.4.0',
     'platform linux-amd64',
     'files 4',
     `${'1a'.repeat(32)} 2140 assets/icon.svg`,
@@ -1484,11 +1484,11 @@ const ALTERED_REASON = 'server/dist/plugin-linux-amd64 has changed';
 export function labReleaseAnswer(): ReleaseAnswer {
     switch (labAdminNews.release) {
     case 'unsigned':
-        return {state: 'unsigned', version: '4.0.0'};
+        return {state: 'unsigned', version: '4.4.0'};
     case 'altered':
-        return {state: 'altered', version: '4.0.0', reason: ALTERED_REASON, manifest: LAB_MANIFEST};
+        return {state: 'altered', version: '4.4.0', reason: ALTERED_REASON, manifest: LAB_MANIFEST};
     default:
-        return {state: 'signed', version: '4.0.0', manifest: LAB_MANIFEST};
+        return {state: 'signed', version: '4.4.0', manifest: LAB_MANIFEST};
     }
 }
 
@@ -1599,7 +1599,7 @@ export function labPushView(): AdminPush | null {
 // GET /admin/appcheck: the people and their sign-ins' verdicts, as the
 // server lists them. null for 'error', which the mock client answers 503;
 // 'refused' the mock client answers 403.
-export function labAppCheckView(): {check: string; problem?: string; people: Array<{userId: string; username?: string; sessions: Array<Record<string, unknown>>}>} | null {
+export function labAppCheckView(): {check: string; minimum?: string; problem?: string; people: Array<{userId: string; username?: string; sessions: Array<Record<string, unknown>>}>} | null {
     const mode = labAdminNews.appCheck;
     if (mode === 'error') {
         return null;
@@ -1632,7 +1632,9 @@ export function labAppCheckView(): {check: string; problem?: string; people: Arr
 
     return {
         check: 'report',
-        ...(mode === 'problem' ? {problem: 'Not a SHA-256 digest, so left out: line 2 of More signing certificates.'} : {}),
+        ...(mode === 'problem' ?
+            {problem: 'Not a SHA-256 digest, so left out: line 2 of More signing certificates. “0.1” in Minimum Matty version is not a version such as 0.1.32, so no minimum is in force.'} :
+            {minimum: '0.1.32'}),
         people,
     };
 }

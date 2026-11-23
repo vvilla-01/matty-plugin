@@ -483,6 +483,7 @@ func TestVoiceTalkFromAPhone(t *testing.T) {
 	require.Equal(t, http.StatusOK, muted.Code, muted.Body.String())
 	assert.JSONEq(t, `{"muted":true,"deafened":false}`, muted.Body.String())
 	require.Eventually(t, func() bool { user, _ := s.relay.user(answer.Session); return user.selfMute }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return dave.self().SelfMuted }, 5*time.Second, 5*time.Millisecond, "the phone is told the voice server holds it muted")
 	dave.speak(5, 20)
 	time.Sleep(100 * time.Millisecond)
 	assert.Len(t, s.relay.heardFrom(answer.Session), before)
@@ -873,7 +874,7 @@ func TestVoiceTalkContract(t *testing.T) {
 	// The data channel's three messages, as the server writes them.
 	for name, message := range map[string]any{
 		"voice-signal-talking.json": voiceTalkingSignal{Talking: []uint32{12, 15}},
-		"voice-signal-self.json":    voiceSelfSignal{Self: voiceSelfState{Channel: 2}},
+		"voice-signal-self.json":    voiceSelfSignal{Self: voiceSelfState{Channel: 2, SelfMuted: true}},
 		"voice-signal-end.json":     voiceEndSignal{End: voiceEndKicked, Reason: withVoiceReason(voiceKickedText, "Spamming")},
 	} {
 		encoded, err := json.Marshal(message)

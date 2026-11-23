@@ -180,6 +180,29 @@ func TestTheCheckerRefusesABundleWithFilesMattermostReadsInsteadOfTheSignedOnes(
 	}
 }
 
+// -exact refuses a file nobody signed, which the plain check only counts:
+// the check the plugin makes of a bundle before it hands it to an admin.
+func TestTheCheckerIsExactWhenAsked(t *testing.T) {
+	b := newSignedBundle(t)
+	members := map[string][]byte{"ceo.villa.matty/notes.txt": []byte("left by somebody")}
+	for name, content := range b.members {
+		members[name] = content
+	}
+	bundle := filepath.Join(t.TempDir(), "extra.tar.gz")
+	require.NoError(t, os.WriteFile(bundle, tarGz(t, members, nil), 0o644))
+
+	code, out := runIt("-rsa-cert", b.rsaCert, "-mldsa-cert", b.mldsaCert, bundle)
+	require.Equal(t, 0, code, out)
+	require.Contains(t, out, "files nobody signed: 1 (notes.txt)")
+
+	code, out = runIt("-rsa-cert", b.rsaCert, "-mldsa-cert", b.mldsaCert, "-exact", bundle)
+	require.Equal(t, 1, code, out)
+	require.Contains(t, out, "altered: notes.txt is not in the release")
+
+	code, out = runIt("-rsa-cert", b.rsaCert, "-mldsa-cert", b.mldsaCert, "-exact", b.tarball)
+	require.Equal(t, 0, code, out)
+}
+
 func TestTheCheckerRefusesBundlesThatDoNotUnpackCleanly(t *testing.T) {
 	b := newSignedBundle(t)
 	dir := t.TempDir()
@@ -189,10 +212,10 @@ func TestTheCheckerRefusesBundlesThatDoNotUnpackCleanly(t *testing.T) {
 		reason string
 	}{
 		"a link":           {[]*tar.Header{{Name: "ceo.villa.matty/assets/link", Typeflag: tar.TypeSymlink, Linkname: "/etc/hostname"}}, "is not a regular file or a folder"},
-		"a path out":       {[]*tar.Header{{Name: "ceo.villa.matty/../escape", Typeflag: tar.TypeReg, Mode: 0o644}}, "outside its folder"},
+		"a path out":       {[]*tar.Header{{Name: "ceo.villa.matty/../escape", Typeflag: tar.TypeReg, Mode: 0o644}}, "a name that is not allowed"},
 		"a second top":     {[]*tar.Header{{Name: "other/x", Typeflag: tar.TypeReg, Mode: 0o644}}, "more than one folder at its top"},
-		"a file twice":     {[]*tar.Header{{Name: "ceo.villa.matty/plugin.json", Typeflag: tar.TypeReg, Mode: 0o644}}, "plugin.json"},
-		"an absolute path": {[]*tar.Header{{Name: "/ceo.villa.matty/x", Typeflag: tar.TypeReg, Mode: 0o644}}, "outside its folder"},
+		"a file twice":     {[]*tar.Header{{Name: "ceo.villa.matty/plugin.json", Typeflag: tar.TypeReg, Mode: 0o644}}, "holds a path twice"},
+		"an absolute path": {[]*tar.Header{{Name: "/ceo.villa.matty/x", Typeflag: tar.TypeReg, Mode: 0o644}}, "a name that is not allowed"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -216,4 +239,42 @@ func TestTheCheckerReadsAnUnpackedFolderAndSaysUnsigned(t *testing.T) {
 
 	code, _ = runIt("-rsa-cert", "only-one.pem", dir)
 	require.Equal(t, 2, code)
+}
+
+// With -exact a bundle is held to the plugin's own limits for one it
+// downloads: larger than 64 MB is refused before it is read, and it unpacks
+// within release.BundleLimits, so a file of more than 256 MB is refused as
+// the plugin refuses it.
+func TestExactHoldsABundleToThePluginsOwnLimits(t *testing.T) {
+	require.Equal(t, release.BundleLimits, limitsFor(true))
+	require.Greater(t, limitsFor(false).Bytes, release.BundleLimits.Bytes)
+
+	b := newSignedBundle(t)
+	dir := t.TempDir()
+
+	large := filepath.Join(dir, "large.tar.gz")
+	file, err := os.Create(large)
+	require.NoError(t, err)
+	require.NoError(t, file.Truncate(release.BundleDownloadBytes+1))
+	require.NoError(t, file.Close())
+	code, out := runIt("-rsa-cert", b.rsaCert, "-mldsa-cert", b.mldsaCert, "-exact", large)
+	require.Equal(t, 1, code, out)
+	require.Contains(t, out, "altered: the bundle is larger than 64 MB, which the plugin does not download")
+
+	// A header that says 300 MB, and nothing after it: refused at the
+	// header, with nothing written.
+	var buf bytes.Buffer
+	compressed := gzip.NewWriter(&buf)
+	archive := tar.NewWriter(compressed)
+	require.NoError(t, archive.WriteHeader(&tar.Header{Name: "ceo.villa.matty/", Typeflag: tar.TypeDir, Mode: 0o755}))
+	require.NoError(t, archive.WriteHeader(&tar.Header{Name: "ceo.villa.matty/big", Typeflag: tar.TypeReg, Mode: 0o644, Size: 300 << 20}))
+	require.NoError(t, compressed.Close())
+	big := filepath.Join(dir, "big.tar.gz")
+	require.NoError(t, os.WriteFile(big, buf.Bytes(), 0o644))
+	code, out = runIt("-rsa-cert", b.rsaCert, "-mldsa-cert", b.mldsaCert, "-exact", big)
+	require.Equal(t, 1, code, out)
+	require.Contains(t, out, "unpacks to more than 256 MB")
+	code, out = runIt("-rsa-cert", b.rsaCert, "-mldsa-cert", b.mldsaCert, big)
+	require.Equal(t, 1, code, out)
+	require.NotContains(t, out, "unpacks to more than")
 }

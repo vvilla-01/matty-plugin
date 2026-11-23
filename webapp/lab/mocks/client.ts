@@ -37,7 +37,7 @@ import radioPicture from '../pictures/channel.svg';
 import sampleClipData from '../media/sample-clip.mp4';
 import {CLIP_POST_TYPE, MIN_CLIP_MS} from '../../src/clipLogic';
 import {channelOf, mattermostStore} from '../../src/mattermost';
-import type {AdminAppCheck, AdminChannel, AdminPush, AdminStills, AdminVoice, ChannelPictureKind, MediaCacheStatus, NewSound, NowPlayingAnswer, PostSearch, StillClaim} from '../../src/client';
+import type {AdminAppCheck, AdminChannel, AdminPush, AdminStills, AdminUpdate, AdminVoice, ChannelPictureKind, MediaCacheStatus, NewSound, NowPlayingAnswer, PostSearch, StillClaim, UpdateBundle} from '../../src/client';
 import {findHashtags} from '../../src/linkify';
 import {PRODUCT_NAME} from '../../src/name';
 import {
@@ -1417,6 +1417,35 @@ export const fetchAdminVoice = (): Promise<AdminVoice> => answer(() => ({
     refused: 'That channel is full.',
     refusedAt: Date.now() - 3600000,
 }));
+
+// Updates for the plugin, for a system admin: on, with a newer release out
+// that the last look found an hour ago, which can be installed from here,
+// and one phone in voice. Check now looks again, as the server does, and
+// finds the same. Install gets a bundle and hands it over, as the server and
+// Mattermost would, without either.
+const labUpdate = (): AdminUpdate => ({
+    enabled: true,
+    running: '4.9.0',
+    platform: 'linux-amd64',
+    latest: '4.10.0',
+    newer: true,
+    url: 'https://github.com/vvilla-01/matty-plugin/releases/tag/v4.10.0',
+    lookedAt: Date.now() - 3600000,
+    install: {ready: true},
+    inVoice: 1,
+});
+
+export const fetchAdminUpdate = (): Promise<AdminUpdate> => answer(labUpdate);
+
+export const checkAdminUpdate = (): Promise<AdminUpdate> => answer(() => ({...labUpdate(), lookedAt: Date.now()}));
+
+export const fetchUpdateBundle = (_asked: string): Promise<UpdateBundle> => answer(() => ({
+    file: new Blob(['a stand-in bundle'], {type: 'application/gzip'}),
+    name: 'ceo.villa.matty-4.10.0-linux-amd64.tar.gz',
+    version: '4.10.0',
+}));
+
+export const uploadPluginBundle = (): Promise<void> => answer(() => undefined);
 
 // The Mattermost name an admin card shows: first and last, as the console
 // does.

@@ -4,10 +4,11 @@ package main
 
 import "github.com/vvilla-01/matty-plugin/server/appcheck"
 
-// Every build that is released: standin.go, which points Steam's two hosts at
-// the stand-in on a developer's machine, is not in it. Nothing here can be
-// told to ask anything but Steam, by a setting or by the environment, and
-// TestAReleaseAsksOnlySteam holds that.
+// Every build that is released: standin.go, which points Steam's two hosts
+// and the plugin's updates at the stand-in on a developer's machine, is not
+// in it. Nothing here can be told to ask anything but Steam and GitHub, by a
+// setting or by the environment, and TestAReleaseAsksOnlySteam and
+// TestAReleaseAsksOnlyGitHub hold that.
 
 // standInRefusal is why a build will not start: never, for a release, which
 // asks Mattermost nothing to find that out.

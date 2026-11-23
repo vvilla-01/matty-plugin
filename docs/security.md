@@ -77,12 +77,15 @@ What that produced, beyond the fixes themselves:
   name, one of the names left out, or another phone session's on this server. See
   [Talking from Matty](voice.md#talking-from-matty).
 - **What the server contacts besides Broadcast Box**, each only when an admin has switched it on:
-  the Mumble server (voice, talking from Matty and the chat bridge); TMDB, the Steam store and IGDB (title lookups);
-  Twitch (`id.twitch.tv`, `api.twitch.tv` and `static-cdn.jtvnw.net`, for Twitch live); Steam
-  (`steamcommunity.com` and `api.steampowered.com`, for Steam status); Hytale
-  (`connect.accounts.hytale.com`, for Hytale names); and the UnifiedPush push servers people's
-  phones name (for push notifications). `LOCKDOWN.md` lists them host by host, and gives the push
-  notifications' outbound rule.
+  the Mumble server, TMDB, the Steam store and IGDB, Twitch, Steam, Hytale, the UnifiedPush push
+  servers people's phones name, and GitHub. That is the Mumble server for voice, talking from Matty
+  and the chat bridge; TMDB, the Steam store and IGDB for title lookups; Twitch (`id.twitch.tv`,
+  `api.twitch.tv` and `static-cdn.jtvnw.net`) for Twitch live; Steam (`steamcommunity.com` and
+  `api.steampowered.com`) for Steam status; Hytale (`connect.accounts.hytale.com`) for Hytale names;
+  the UnifiedPush push servers for push notifications; and GitHub for **Look for updates**
+  (`api.github.com` for the look, and `github.com` and GitHub's file hosts under
+  `githubusercontent.com` only when a system admin presses Install). `LOCKDOWN.md` lists them host
+  by host, and gives the push notifications' outbound rule.
 - **A push is sent only when Mattermost decides to push**, from its push hook, which the plugin
   answers at once without reading its store or the network, and never by changing or cancelling
   Mattermost's own push. It carries what Mattermost's own push carries under its push notification
@@ -370,7 +373,7 @@ soundboard's tiles, the upload's bytes and the loudness measure) and `build/chec
 `build/check-reads.mjs` (what the panel reads of the server); `make e2e` runs the real-time recorder
 tests. A Go test reads every help text in `plugin.json`, the README, every chapter of this manual
 and `LOCKDOWN.md`, and fails on any sentence that promises nobody outside is
-contacted without naming Twitch, Steam, Hytale and UnifiedPush, or counts the cases and leaves one out, and another on any that says the plugin never receives audio, which
+contacted without naming Twitch, Steam, Hytale, UnifiedPush and GitHub, or counts the cases and leaves one out, and another on any that says the plugin never receives audio, which
 was never quite true and is not a promise the soundboard could keep. The soundboard's player is tested
 against a Mumble server made inside the test, on the wire. See
 [Build from source](building.md#build-from-source).
@@ -404,9 +407,9 @@ one that travels with a release), and finds one of three things:
   look: System Console > Plugins > Matty > App check.
 
 The App check section of the System Console starts with a line on this: **This plugin** says "This
-plugin is a signed release of Matty Plugin 4.3.0.", "This plugin is not a signed release: a
-development build, or somebody’s own build of Matty Plugin 4.3.0." or, as an error, "This plugin’s
-files are altered. They are not as the signed release of Matty Plugin 4.3.0 has them:" and why.
+plugin is a signed release of Matty Plugin 4.4.0.", "This plugin is not a signed release: a
+development build, or somebody’s own build of Matty Plugin 4.4.0." or, as an error, "This plugin’s
+files are altered. They are not as the signed release of Matty Plugin 4.4.0 has them:" and why.
 Under it is the SHA-256 of the manifest the server sent, worked out in the browser, to compare with
 the one published with the release, and, for a release that is signed or altered, what the check
 does and does not show.
@@ -415,7 +418,7 @@ The plugin runs in every state. Any signed-in reader can ask for the manifest an
 (`GET /api/v1/release`), and **Matty checks them itself**, against its own copies of the two
 certificates, with the phone's own cryptography: both signatures first, then the manifest, whose
 version must be the one the server reports. It shows the result where it lists the plugin: "Matty
-Plugin 4.3.0 · signed release (RSA + ML-DSA)", "· not a signed release", or "· release not
+Plugin 4.4.0 · signed release (RSA + ML-DSA)", "· not a signed release", or "· release not
 verified:" and why. A phone that cannot verify ML-DSA-87 reads "not verified", never "signed" on the
 RSA signature alone. An unsigned or unverified release goes on working, in the app as in the panel.
 
@@ -428,6 +431,10 @@ What it shows, and what it cannot:
 - **An older genuine release still reads signed**, for its own version. The check says the files are
   a release made with Matty's keys, not that they are the latest one.
 - **Nothing is fetched to decide it.** The certificates are built into the plugin and into the app.
+
+The same check, made stricter, is what [Plugin updates](updates.md) holds a downloaded release to
+before it hands the bundle to a system admin to install: against the same two certificates, for
+exactly the version looked for, with no file the manifest does not list.
 
 ## The app check
 
@@ -508,6 +515,48 @@ What it shows, and what it cannot:
   it runs on, also accepts an emulator and a debug build, and marks such a verdict **Development**
   on the card. None of that is in a release build, and a test proves a release build refuses an
   emulator's chain.
+
+## A minimum Matty version
+
+**System Console > Plugins > Matty > App check > Minimum Matty version** is the oldest Matty this
+server answers, such as `0.1.32`. It is blank, and so none, until an admin sets it, and anything that
+is not three numbers such as `0.1.32` counts as none, which **Results** says under **Matty apps**.
+While one is set, **Results** says it there in a line.
+
+What it does:
+
+- **It stops the plugin's own routes.** Matty says its version first in every request it makes
+  (its User-Agent, `Matty/0.1.32 (Android 17; Mattermost client)`; a debug build's `0.1.32-debug`
+  counts as `0.1.32`). A request from a Matty older than the minimum, or one whose version cannot be
+  read, is refused on every route of the plugin's API but the few it needs to show why (`/access`,
+  `/me`, `/release`, the app check's two, taking its own push registration back and leaving voice),
+  with "This server needs Matty 0.1.32 or newer. You have 0.1.31." It is refused before the app
+  check is asked. The panel's own files and the Twitch, Steam and Hytale connect pages are outside
+  it, as they are outside the app check.
+- **It ends their voice.** The plugin keeps the version each Matty in voice through this server
+  joined with. When a minimum comes into force, or is raised, every one that does not meet it is
+  taken out of voice and shown the same sentence. Clearing the minimum ends nobody's voice.
+- **It tells the app.** The minimum is in every `/access` answer, for everybody, whatever **Check
+  the Matty app** is set to, and every open Matty is told at once when it changes. Matty 0.1.32 and
+  newer, when they are older than the minimum, close this server with a page that cannot be
+  dismissed: "Update Matty", the minimum and the version they are, **Get the update**, **Check
+  again**, and the ways to another saved server and to sign out. It goes as soon as the minimum
+  allows that version, or the app is updated.
+- **Matty 0.1.31 and older know nothing of it.** Their requests for streams, clips, voice and the
+  rest are refused, so their panel says "Can't reach Matty" (or this server's name for the plugin)
+  until the server next sends the list of who is live, which goes to every open client; they then
+  show the list but cannot play from it. Chat goes on as before.
+
+What it does not do:
+
+- **It is the app's own word.** A changed copy can say any version, or not say it is Matty at all,
+  and then neither the minimum nor the app check refuses it. **Check, and refuse a Matty that fails**
+  turns away only a copy that says it is Matty and is not the official build.
+- **It does not touch push notifications.** A Matty that registered for them before the minimum
+  keeps receiving them.
+- **It does not touch the web panel**, or anything else that does not say it is Matty, and it does
+  not touch Mattermost itself: chat, and everything else that is not this plugin's.
+- **A number above the newest Matty turns every Matty away**, until it is lowered.
 
 ## Notes and limitations
 

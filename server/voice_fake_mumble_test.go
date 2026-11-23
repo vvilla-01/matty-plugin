@@ -17,15 +17,20 @@ import (
 )
 
 // relayMumble is a voice server for tests that takes many connections and
-// does what Murmur was measured doing (DESIGN's facts, from 1.5.939): it
-// passes voice on to everybody else in the sender's channel with the
-// sender's session, sequence and last-frame flag intact, never back to the
-// sender, and not from or to the muted or deafened; it honours moves,
-// refuses a full or forbidden channel with PermissionDenied, ignores a move
-// to a channel that does not exist, takes self mute and deafen, kicks the
-// first connection when a second one takes the same name in any case, and
-// can kick, ban, mute, deafen and suppress, mute and deafen coupled as
-// Murmur couples them. Made-up people without a connection can talk.
+// does what Murmur was measured doing (from 1.5.939): it passes voice on to
+// everybody else in the sender's channel with the sender's session, sequence
+// and last-frame flag intact, never back to the sender, and not from or to
+// the muted or deafened; it honours moves, refuses a full or forbidden
+// channel with PermissionDenied, ignores a move to a channel that does not
+// exist, takes self mute and deafen, kicks the first connection when a
+// second one takes the same name in any case, and can kick, ban, mute,
+// deafen and suppress, mute and deafen coupled as Murmur couples them.
+// Made-up people without a connection can talk.
+//
+// A connection's own state messages (its moves, self mutes and deafens) go
+// through Murmur's limit (relayBucket): past it they are dropped without a
+// word. One that changes nothing is answered with nothing, as Murmur
+// answers it.
 type relayMumble struct {
 	t        *testing.T
 	listener net.Listener
@@ -51,6 +56,16 @@ type relayMumble struct {
 	// Moves are read and never answered.
 	silentMoves bool
 
+	// Murmur's messageburst and messagelimit, 5 and 1 as it comes.
+	burst, perSecond int
+
+	// The next so many own state messages, from anybody, are dropped
+	// without a word, whatever the limit says.
+	dropStates int
+
+	// Every own state message each session sent, in order.
+	received map[uint32][]relayReceived
+
 	// Voice the server was sent, by sender, and of it what it passed on
 	// from the connections, which nothing from the muted is.
 	heard   map[uint32][]relayAudio
@@ -71,8 +86,49 @@ type relayUser struct {
 	mute, deaf, suppress bool
 	selfMute, selfDeaf   bool
 
+	// Its own state messages, counted against Murmur's limit.
+	bucket relayBucket
+
 	// nil for a made-up person.
 	conn *gumble.Conn
+}
+
+// relayReceived is a state message a connection sent about itself: a move,
+// its self mute and deafen (nil where the message had none), when it came,
+// and whether the limit dropped it.
+type relayReceived struct {
+	at                 time.Time
+	move               bool
+	selfMute, selfDeaf *bool
+	dropped            bool
+}
+
+// relayBucket is Murmur's limit on a user's own messages (its LeakyBucket):
+// every message fills it by one, it drains perSecond a second in whole
+// messages, with the clock started again at each drain, and a message that
+// would fill it past burst is dropped.
+type relayBucket struct {
+	filled int
+	since  time.Time
+}
+
+func (b *relayBucket) take(now time.Time, burst, perSecond int) bool {
+	if b.since.IsZero() {
+		b.since = now
+	}
+
+	drained := int(now.Sub(b.since).Milliseconds()) * perSecond / 1000
+	if drained > 0 {
+		b.since = now
+	}
+	b.filled = max(b.filled-drained, 0)
+
+	if b.filled > burst-1 {
+		return false
+	}
+	b.filled++
+
+	return true
 }
 
 type relayAudio struct {
@@ -99,11 +155,14 @@ func newRelayMumble(t *testing.T) *relayMumble {
 			3: {id: 3, name: "AFK"},
 			4: {id: 4, parent: 2, name: "Duo", max: 2},
 		},
-		users:   map[uint32]*relayUser{},
-		next:    10,
-		deny:    map[uint32]string{},
-		heard:   map[uint32][]relayAudio{},
-		relayed: map[uint32][]relayAudio{},
+		users:     map[uint32]*relayUser{},
+		next:      10,
+		deny:      map[uint32]string{},
+		burst:     5,
+		perSecond: 1,
+		received:  map[uint32][]relayReceived{},
+		heard:     map[uint32][]relayAudio{},
+		relayed:   map[uint32][]relayAudio{},
 	}
 
 	t.Cleanup(func() {
@@ -195,8 +254,10 @@ func (f *relayMumble) serve(raw net.Conn) {
 		}
 	}
 
+	// Murmur counts the connection's handshake against the same limit, so
+	// a connection's allowance starts one message down.
 	f.next++
-	me := &relayUser{session: f.next, name: name, conn: conn}
+	me := &relayUser{session: f.next, name: name, conn: conn, bucket: relayBucket{filled: 1, since: time.Now()}}
 	f.users[me.session] = me
 
 	var channels []relayChannel
@@ -307,6 +368,20 @@ func (f *relayMumble) userState(me *relayUser, state *MumbleProto.UserState) {
 		return
 	}
 
+	// The limit counts every message of its own, one that changes nothing
+	// included, before anything else is looked at.
+	note := relayReceived{at: time.Now(), move: state.ChannelId != nil, selfMute: state.SelfMute, selfDeaf: state.SelfDeaf}
+	allowed := me.bucket.take(note.at, f.burst, f.perSecond)
+	if allowed && f.dropStates > 0 {
+		f.dropStates--
+		allowed = false
+	}
+	note.dropped = !allowed
+	f.received[me.session] = append(f.received[me.session], note)
+	if !allowed {
+		return
+	}
+
 	if state.ChannelId != nil && state.GetChannelId() != me.channel {
 		target := state.GetChannelId()
 		channel, known := f.channels[target]
@@ -337,15 +412,23 @@ func (f *relayMumble) userState(me *relayUser, state *MumbleProto.UserState) {
 	}
 
 	if state.SelfMute != nil || state.SelfDeaf != nil {
+		mute, deaf := me.selfMute, me.selfDeaf
 		if state.SelfDeaf != nil {
-			me.selfDeaf = state.GetSelfDeaf()
-			if me.selfDeaf {
-				me.selfMute = true
+			deaf = state.GetSelfDeaf()
+			if deaf {
+				mute = true
 			}
 		}
 		if state.SelfMute != nil {
-			me.selfMute = state.GetSelfMute() || me.selfDeaf
+			mute = state.GetSelfMute()
+			if !mute {
+				deaf = false
+			}
 		}
+		if mute == me.selfMute && deaf == me.selfDeaf {
+			return
+		}
+		me.selfMute, me.selfDeaf = mute, deaf
 		f.broadcastLocked(&MumbleProto.UserState{Session: proto.Uint32(me.session), Actor: proto.Uint32(me.session), SelfMute: proto.Bool(me.selfMute), SelfDeaf: proto.Bool(me.selfDeaf)})
 	}
 }
@@ -531,6 +614,27 @@ func (f *relayMumble) named(name string) uint32 {
 	}
 
 	return 0
+}
+
+// receivedFrom is every own state message a session sent, in order.
+func (f *relayMumble) receivedFrom(session uint32) []relayReceived {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	return append([]relayReceived(nil), f.received[session]...)
+}
+
+// statesFrom is the self mute and deafen messages a session sent, moves
+// left out.
+func (f *relayMumble) statesFrom(session uint32) []relayReceived {
+	var states []relayReceived
+	for _, message := range f.receivedFrom(session) {
+		if message.selfMute != nil || message.selfDeaf != nil {
+			states = append(states, message)
+		}
+	}
+
+	return states
 }
 
 func (f *relayMumble) dialCount() int {

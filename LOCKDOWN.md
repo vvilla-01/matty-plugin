@@ -398,15 +398,44 @@ capability, which anybody holding it can send to, and with the phone's secret ca
 shows, so neither is ever logged, part of a key's name or shown, not even on the card, which counts
 phones by push server only.
 
+**GitHub, only if an admin switches on "Look for updates"** (off by default, under **Updates**).
+Once a day, on one node, once when the setting is switched on, and when an admin presses **Check
+now** (at most once a minute), the Mattermost server sends one `GET` to
+`https://api.github.com/repos/vvilla-01/matty-plugin/releases/latest`, with
+`User-Agent: MattyPlugin/<version> (Mattermost plugin; +https://github.com/vvilla-01/matty-plugin)`,
+no cookie and nothing else about this server; it gives up after 15 seconds and reads at most 256 KB,
+of which it uses the tag and whether this platform's bundle is there. Only when a system admin
+presses **Install**, on the card or in Matty, it also sends one `GET` to
+`https://github.com/vvilla-01/matty-plugin/releases/download/v<version>/<bundle>`, an address the
+plugin builds itself, following at most five redirects, each over HTTPS to `github.com` or a host
+under `githubusercontent.com` (where GitHub keeps release files), through the proxy the environment
+names, as the title lookups do; at most 64 MB, within two minutes, at most once a minute for the
+whole server. The checked bundle then goes from this server to that admin's browser or Matty, which
+uploads it to this same server; it goes nowhere else. A firewall that limits what the Mattermost
+server may reach must let it reach `api.github.com` on 443 while the setting is on, and `github.com`
+and `*.githubusercontent.com` on 443 for **Install**. What it keeps is in its key-value store: the
+last look and the last trouble (`update_seen`), which versions the system admins were told about
+(`update_told_<version>`), when somebody last pressed **Check now**, the daily or switch-on look
+last ran or a bundle was last asked for (`update_check_claim`, `update_on_claim`,
+`update_bundle_claim`), and, once the setting has been on, the daily job's own record
+(`cron_plugin_updates`). With the setting off, only the card reads the last look, when a system
+admin opens it. A bundle is unpacked in a
+private folder under the server's temporary folder, `matty-update-*`, which is removed before the
+bundle is handed out; one that a server stopping in the middle left is removed within about ten
+minutes of the plugin's next start.
+See [Plugin updates](docs/updates.md).
+
 **The release check and the app check fetch nothing from anywhere.** The plugin checks its own
 files against the signatures shipped in its release, and a Matty app's proof against Google's
 attestation roots, Google's list of revoked attestation keys and GrapheneOS's boot keys,
-all of which are copies built into the release. See [Signed releases](docs/security.md#signed-releases)
-and [The app check](docs/security.md#the-app-check).
+all of which are copies built into the release. A release that **Install** downloads, as above, is
+checked against the same two certificates built in, and nothing more is fetched to check it. See [Signed releases](docs/security.md#signed-releases) and
+[The app check](docs/security.md#the-app-check).
 
 **Browsers contact somebody other than this server in exactly four cases, all off by default: two
 for Twitch, one for Steam and one for Hytale; the UnifiedPush push servers above are reached by the
-Mattermost server and by phones, never by a browser.**
+Mattermost server and by phones, and GitHub, for the plugin's updates, by the Mattermost server,
+never by a browser.**
 
 1. **Connect Twitch** (under "Show people live on Twitch"). The person who presses Connect Twitch
    and then Continue on Twitch has their own browser, in the window that opens, reach
@@ -447,7 +476,9 @@ In the Matty app, 3 and 4 happen in the app's own sign-in window instead of a br
 
 Apart from these four cases (Twitch's two, Connect Steam and Connect Hytale), browsers talk only to
 this server; push notifications go from this server to the UnifiedPush push servers and on to the
-phones, and no browser takes part. The Steam profile button in a profile popover is an ordinary link: it opens
+phones, and the plugin's updates come from GitHub to this server, and no browser takes part in
+either. The page of a new release, which the panel's alert and Matty show system admins, is a link
+that opens GitHub only when pressed. The Steam profile button in a profile popover is an ordinary link: it opens
 steamcommunity.com only when pressed, like Watch on Twitch.
 
 Twitch's player only runs on https at port 443 under a name, so on `mattermost.example.com:8065` it

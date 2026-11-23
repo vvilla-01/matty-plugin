@@ -16,6 +16,7 @@ import {AdminSounds} from './components/AdminSounds';
 import {AdminStills} from './components/AdminStills';
 import {AdminTheme} from './components/AdminTheme';
 import {AdminTwitch} from './components/AdminTwitch';
+import {AdminUpdate} from './components/AdminUpdate';
 import {AdminSteam} from './components/AdminSteam';
 import {AdminHytale} from './components/AdminHytale';
 
@@ -43,6 +44,11 @@ export const ADMIN_SETTINGS: AdminSetting[] = [
     // The app check: this plugin's own release in one line, and who has
     // proved a genuine Matty and who has not. Read-only.
     {key: 'appchecklist', component: AdminAppCheck, showTitle: true},
+
+    // Updates for the plugin itself: the version running, the newest
+    // release the last look found, Check now, and Install, or why a newer
+    // version cannot be installed from here.
+    {key: 'updatestatus', component: AdminUpdate, showTitle: true},
 
     // Push notifications: whether pushes can go out, and how many phones get
     // them, by push server, never by person. Read-only.

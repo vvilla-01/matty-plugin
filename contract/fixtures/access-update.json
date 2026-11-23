@@ -1,0 +1,28 @@
+{
+  "access": "linked",
+  "configured": true,
+  "contract": 4,
+  "version": "VERSION",
+  "name": "Matty",
+  "artwork": {
+    "emblem": false,
+    "ghost": false
+  },
+  "release": {
+    "state": "signed",
+    "version": "VERSION"
+  },
+  "app": {
+    "check": "report",
+    "state": "none"
+  },
+  "push": {
+    "state": "off",
+    "reason": "Push notifications are switched off on this server."
+  },
+  "update": {
+    "version": "4.10.0",
+    "url": "https://github.com/vvilla-01/matty-plugin/releases/tag/v4.10.0",
+    "install": true
+  }
+}

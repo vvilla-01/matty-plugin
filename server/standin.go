@@ -3,14 +3,22 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/vvilla-01/matty-plugin/server/appcheck"
+	"github.com/vvilla-01/matty-plugin/server/release"
 )
 
 // A build for developing on one machine (make standin-linux), and never a
 // release: only a build made with the villanet_standin tag has this file.
+//
+// The same holds for the plugin's own updates (update.go): GitHub's address
+// is fixed, and this build asks the stand-in in its place.
 //
 // Where Steam lives is not a setting, on purpose (steam.go): the sign-in's
 // address is fixed, so nobody can point the server at something that is not
@@ -31,9 +39,72 @@ import (
 // the environment: this build can ask this machine, and nothing else.
 const standInSteam = "http://127.0.0.1:7788"
 
+// standInVersion is the version this build is to the plugin's updates, when
+// build/make-standin-update.sh makes one to install, with
+// -ldflags "-X main.standInVersion=<version>": so that once installed the
+// card, /access and /me say that version (runningVersion). Empty: the
+// plugin's own.
+var standInVersion = ""
+
 func init() {
 	steamOpenIDBase = standInSteam
 	steamAPIBase = standInSteam
+
+	// The plugin's updates ask the stand-in beside it, which serves releases
+	// as GitHub does, from a folder of bundles signed with throwaway keys,
+	// and the two certificates they are checked against. This build is
+	// never a signed release, so it need not be one to hand out a bundle.
+	updateAPIBase, updateSiteBase = standInSteam, standInSteam
+	updatePlainOK = true
+	updateRedirectOK = standInRedirectOK
+	updateNeedsSigned = false
+	updatePinsFrom = standInPinsAt(standInSteam)
+	if plainVersion(standInVersion) == standInVersion && standInVersion != "" {
+		updateRunning = standInVersion
+	}
+}
+
+// standInRedirectOK lets a download be sent on only to the stand-in itself.
+func standInRedirectOK(address *url.URL) bool {
+	return address != nil && address.Scheme == "http" && address.Host == strings.TrimPrefix(standInSteam, "http://") && address.User == nil
+}
+
+// standInPinsAt are the certificates the stand-in at base signs its bundles
+// with, as it serves them.
+func standInPinsAt(base string) func(ctx context.Context, client *http.Client) (release.Pins, error) {
+	return func(ctx context.Context, client *http.Client) (release.Pins, error) {
+		return standInPins(ctx, client, base)
+	}
+}
+
+func standInPins(ctx context.Context, client *http.Client, base string) (release.Pins, error) {
+	read := func(name string) ([]byte, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/fake/update/"+name, nil)
+		if err != nil {
+			return nil, err
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			return nil, err
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return nil, errors.New("the stand-in has no " + name)
+		}
+
+		return io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	}
+
+	rsaCert, err := read("rsa.pem")
+	if err != nil {
+		return release.Pins{}, err
+	}
+	mldsaCert, err := read("mldsa87.pem")
+	if err != nil {
+		return release.Pins{}, err
+	}
+
+	return release.NewPins(rsaCert, mldsaCert)
 }
 
 // standInRefusal is why this build will not start here, or "" where it may:

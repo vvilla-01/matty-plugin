@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -94,7 +95,8 @@ type voiceChannel struct {
 	ID   uint32 `json:"id"`
 	Name string `json:"name"`
 
-	// The channel this one is under, 0 included; nil for the root alone.
+	// The channel this one is under, 0 included; nil for the root, and for
+	// a shown channel whose parent is not shown.
 	Parent *uint32 `json:"parent,omitempty"`
 
 	// How deep in the tree: 0 for the root, 1 under it, and so on.
@@ -121,6 +123,11 @@ type voiceState struct {
 	// Why the last attempt failed, for the admin-only notice. Never sent to
 	// anybody else, and never to anybody at all while the connection is up.
 	problem string
+
+	// The lines of Channels to show that match no channel on the voice
+	// server, and the ones that match more than one, for the admins' card.
+	unmatched []string
+	several   []voiceSeveral
 }
 
 func (p *Plugin) getVoice() voiceState {
@@ -556,16 +563,26 @@ func (p *Plugin) publishVoiceLocked(client *gumble.Client, cfg *configuration, e
 		return
 	}
 
-	channels := voiceChannelsOf(client)
+	setting := cfg.voiceShownSetting()
+	channels, card := setting.shown(voiceChannelsOf(client))
 	people := p.rosterOf(client, cfg)
+	if setting.listed() {
+		people = peopleInChannels(people, channels)
+	}
 
 	previous := p.getVoice()
-	if previous.connected && sameChannels(previous.channels, channels) && sameRoster(previous.people, people) {
+	same := previous.connected && sameChannels(previous.channels, channels) && sameRoster(previous.people, people)
+	if same && slices.Equal(previous.unmatched, card.unmatched) && slices.EqualFunc(previous.several, card.several, sameVoiceSeveral) {
 		return
 	}
 
-	p.setVoice(voiceState{connected: true, channels: channels, people: people})
-	p.publishRosterSoon()
+	p.setVoice(voiceState{connected: true, channels: channels, people: people, unmatched: card.unmatched, several: card.several})
+
+	// The lines that match nothing, or more than one channel, are the
+	// card's alone, which reads them when it opens.
+	if !same {
+		p.publishRosterSoon()
+	}
 }
 
 // republishVoice rebuilds the roster on the connection already held, for a
@@ -780,6 +797,213 @@ func voiceChannelsOf(client *gumble.Client) []voiceChannel {
 	}
 
 	return channels
+}
+
+// voiceShownLine is one line of Channels to show, ready to compare, with
+// the text as the admin wrote it. A line without "/" is a name, which
+// matches every channel so named, the root included. A line with "/" is a
+// path of names from below the root, and matches that channel alone: a "/"
+// at the start makes a single name a path ("/Lobby" is the Lobby right
+// under the root), and a "/" at the end is left out. Names are trimmed.
+type voiceShownLine struct {
+	text string
+	name string
+	path []string
+}
+
+func newVoiceShownLine(line string) voiceShownLine {
+	shown := voiceShownLine{text: line}
+
+	trimmed := strings.TrimSpace(line)
+	if !strings.Contains(trimmed, "/") {
+		shown.name = trimmed
+		return shown
+	}
+
+	trimmed = strings.TrimSuffix(strings.TrimPrefix(trimmed, "/"), "/")
+	for _, name := range strings.Split(trimmed, "/") {
+		shown.path = append(shown.path, strings.TrimSpace(name))
+	}
+
+	return shown
+}
+
+// matches is whether the line names a channel, without regard to case
+// (Unicode's simple folding, name by name): a name line by the channel's
+// name, a path line by its path, the names of the channels from below the
+// root down to it ("Gaming/Duo"). The root has no path, so only a name line
+// names it.
+func (l voiceShownLine) matches(name string, path []string) bool {
+	if l.path == nil {
+		return strings.EqualFold(strings.TrimSpace(name), l.name)
+	}
+	if len(path) != len(l.path) {
+		return false
+	}
+
+	for i := range path {
+		if l.path[i] == "" || !strings.EqualFold(strings.TrimSpace(path[i]), l.path[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// voiceSeveral is a line of Channels to show that matches more than one
+// channel, for the admins' card: the line as the admin wrote it, the paths
+// of the first voiceSeveralPaths channels it matched (voiceChannelPath),
+// and how many more it matched.
+type voiceSeveral struct {
+	Line  string   `json:"line"`
+	Paths []string `json:"paths"`
+	More  int      `json:"more,omitempty"`
+}
+
+// How many of the channels a line matches the card names.
+const voiceSeveralPaths = 5
+
+func sameVoiceSeveral(a, b voiceSeveral) bool {
+	return a.Line == b.Line && a.More == b.More && slices.Equal(a.Paths, b.Paths)
+}
+
+// voiceShownCard is what the admins' card says of Channels to show: the
+// lines that name no channel, and the ones that name more than one, each as
+// the admin wrote it.
+type voiceShownCard struct {
+	unmatched []string
+	several   []voiceSeveral
+}
+
+// shownVoiceChannels is the channel tree as Matty and the panel are told of
+// it under Channels to show: every channel a line names, and every channel
+// under one of those, in the tree's order. A shown channel whose parent is
+// not shown has no parent and depth 0, and the channels under it count their
+// depth from there. With it comes what the card says of the lines. No lines:
+// the whole tree.
+//
+// tree is in voiceChannelsOf's order, which puts every channel after the
+// one it is under.
+func shownVoiceChannels(tree []voiceChannel, lines []string) ([]voiceChannel, voiceShownCard) {
+	if len(lines) == 0 {
+		return tree, voiceShownCard{}
+	}
+
+	parsed := make([]voiceShownLine, 0, len(lines))
+	for _, line := range lines {
+		parsed = append(parsed, newVoiceShownLine(line))
+	}
+	named := make([][]string, len(parsed))
+	counted := make([]int, len(parsed))
+
+	paths := map[uint32][]string{}
+	depths := map[uint32]int{}
+	var shown []voiceChannel
+
+	for _, channel := range tree {
+		var path []string
+		if channel.Parent != nil {
+			path = append(slices.Clone(paths[*channel.Parent]), channel.Name)
+		}
+		paths[channel.ID] = path
+
+		listed := false
+		for i, line := range parsed {
+			if !line.matches(channel.Name, path) {
+				continue
+			}
+			listed = true
+			counted[i]++
+			if len(named[i]) < voiceSeveralPaths {
+				named[i] = append(named[i], voiceChannelPath(channel.Name, path))
+			}
+		}
+
+		parentShown := false
+		if channel.Parent != nil {
+			_, parentShown = depths[*channel.Parent]
+		}
+		if !listed && !parentShown {
+			continue
+		}
+
+		if parentShown {
+			channel.Depth = depths[*channel.Parent] + 1
+		} else {
+			channel.Parent, channel.Depth = nil, 0
+		}
+		depths[channel.ID] = channel.Depth
+		shown = append(shown, channel)
+	}
+
+	var card voiceShownCard
+	for i, line := range parsed {
+		switch {
+		case counted[i] == 0:
+			card.unmatched = append(card.unmatched, line.text)
+		case counted[i] > 1:
+			card.several = append(card.several, voiceSeveral{Line: line.text, Paths: named[i], More: counted[i] - len(named[i])})
+		}
+	}
+
+	return shown, card
+}
+
+// shown is the channel tree under Channels to show, with what the card says
+// of its lines (shownVoiceChannels). With no line, every channel; with lines
+// none of which is used (each too long), none, as with lines that name
+// nothing.
+func (s voiceShownSetting) shown(tree []voiceChannel) ([]voiceChannel, voiceShownCard) {
+	switch {
+	case len(s.lines) > 0:
+		return shownVoiceChannels(tree, s.lines)
+	case s.listed():
+		return nil, voiceShownCard{}
+	default:
+		return tree, voiceShownCard{}
+	}
+}
+
+// voiceChannelPath is how the card names a channel, as a line of Channels to
+// show would name that channel alone: "/Lobby" for one right under the root,
+// "Gaming/Duo" deeper, and the root by its own name, marked "(the root)".
+func voiceChannelPath(name string, path []string) string {
+	switch len(path) {
+	case 0:
+		return name + " (the root)"
+	case 1:
+		return "/" + path[0]
+	default:
+		return strings.Join(path, "/")
+	}
+}
+
+// peopleInChannels is the people in one of the channels, the rest left out:
+// somebody in a channel that is not shown is not in voice as far as Matty
+// and the panel are told.
+func peopleInChannels(people []voicePerson, channels []voiceChannel) []voicePerson {
+	shown := make(map[uint32]bool, len(channels))
+	for _, channel := range channels {
+		shown[channel.ID] = true
+	}
+
+	return slices.DeleteFunc(people, func(person voicePerson) bool { return !shown[person.Channel] })
+}
+
+// shownVoiceChannelIDs is the channels the roster shows, by id, or nil while
+// Channels to show is blank and every channel is.
+func (p *Plugin) shownVoiceChannelIDs() map[uint32]bool {
+	if !p.getConfiguration().voiceShownSetting().listed() {
+		return nil
+	}
+
+	channels := p.getVoice().channels
+	shown := make(map[uint32]bool, len(channels))
+	for _, channel := range channels {
+		shown[channel.ID] = true
+	}
+
+	return shown
 }
 
 // voiceUserID matches a Mumble name to a Mattermost account by

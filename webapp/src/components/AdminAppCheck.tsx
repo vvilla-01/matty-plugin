@@ -58,17 +58,22 @@ const STATE_WORDS: Record<State, string> = {
     stale: 'No longer accepted',
 };
 
-// What the setting does now, in a line.
+// What the setting does now, in a line: the check alone, since Minimum
+// Matty version refuses on its own and has its own line below.
 function modeLine(check: string): string {
     switch (check) {
     case 'off':
-        return 'The check is off: no Matty is asked to prove itself, and nobody is refused.';
+        return 'The check is off: no Matty is asked to prove itself.';
     case 'require':
         return 'Each Matty proves itself when it opens, and one that has not passed is refused everywhere but its lock screen.';
     default:
-        return 'Each Matty proves itself when it opens, and what it found is shown to that person and here. Nobody is refused.';
+        return 'Each Matty proves itself when it opens, and what it found is shown to that person and here. The check refuses nobody.';
     }
 }
+
+// What Minimum Matty version does now, in a line, while one is set.
+const minimumLine = (minimum: string): string =>
+    `A Matty older than ${minimum}, or one whose version cannot be read, is refused by this plugin's API everywhere but the few places it needs to show why.`;
 
 // What this plugin's files are, in words.
 function releaseWords(release: ReleaseAnswer): {text: string; error: boolean} {
@@ -212,6 +217,7 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
             <h4 className='vntv-admin-sub'>{'Matty apps'}</h4>
             <AdminHead>{head}</AdminHead>
             {view ? <p className='vntv-admin-line'>{modeLine(view.check)}</p> : null}
+            {view?.minimum ? <p className='vntv-admin-line'>{minimumLine(view.minimum)}</p> : null}
             {view?.problem ? <p className='vntv-admin-line vntv-notice-error'>{view.problem}</p> : null}
 
             {/* What a verdict is worth, said where the verdicts are. */}

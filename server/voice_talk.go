@@ -107,8 +107,10 @@ type voiceUplink struct {
 	lock sync.Mutex
 
 	// Muted, deafened, server muted, suppressed, or without a phone: nothing
-	// goes up.
-	blocked bool
+	// goes up. blockedAt is the number of the session's decision it came
+	// from (voiceBlock).
+	blocked   bool
+	blockedAt uint64
 
 	// The RTP timestamps of the phone's packets, unwrapped to 64 bits: the
 	// first one, and the latest.
@@ -279,21 +281,51 @@ func (u *voiceUplink) stopTalkingLocked() bool {
 	return true
 }
 
-// setBlocked stops voice going up (muted, deafened, server muted,
-// suppressed, no phone) or lets it go up again. Talking ends at once.
-func (u *voiceUplink) setBlocked(blocked bool) {
+// voiceBlock is a session's decision on whether its voice may go up, and the
+// decision's number, counted under the session's lock.
+type voiceBlock struct {
+	blocked bool
+	at      uint64
+}
+
+// setBlockedAs takes a session's decision, unless it took a newer one
+// already.
+func (u *voiceUplink) setBlockedAs(block voiceBlock) {
 	u.lock.Lock()
-	u.blocked = blocked
-	stopped := false
-	if blocked {
-		u.preroll = nil
-		stopped = u.stopTalkingLocked()
+	if block.at <= u.blockedAt {
+		u.lock.Unlock()
+		return
 	}
+	u.blockedAt = block.at
+	stopped := u.setBlockedLocked(block.blocked)
 	u.lock.Unlock()
 
 	if stopped {
 		u.changed()
 	}
+}
+
+// setBlocked stops voice going up (muted, deafened, server muted,
+// suppressed, no phone) or lets it go up again. Talking ends at once.
+func (u *voiceUplink) setBlocked(blocked bool) {
+	u.lock.Lock()
+	stopped := u.setBlockedLocked(blocked)
+	u.lock.Unlock()
+
+	if stopped {
+		u.changed()
+	}
+}
+
+// setBlockedLocked is setBlocked under the lock, and whether talking ended.
+func (u *voiceUplink) setBlockedLocked(blocked bool) bool {
+	u.blocked = blocked
+	if !blocked {
+		return false
+	}
+	u.preroll = nil
+
+	return u.stopTalkingLocked()
 }
 
 // restart is a new phone taking over: its RTP timestamps start afresh, and

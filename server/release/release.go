@@ -396,6 +396,12 @@ type Expect struct {
 	// Platform is the platform whose executable must be listed, such as
 	// linux-amd64. Empty: every platform the manifest names.
 	Platform string
+
+	// Exact refuses any regular file the manifest does not list, wherever
+	// it is, as a check of a bundle about to be installed does: such a
+	// folder is made from the bundle and nothing else, so a file nobody
+	// signed came with it.
+	Exact bool
 }
 
 // Finding is what a check of a plugin's folder found.
@@ -566,6 +572,9 @@ func check(root *os.Root, pins Pins, want Expect) Finding {
 
 	f.UnlistedCount = len(unlisted)
 	f.Unlisted = unlisted[:min(len(unlisted), MaxUnlistedShown)]
+	if want.Exact && len(unlisted) > 0 {
+		return altered(f, unlisted[0], "%s is not in the release", unlisted[0])
+	}
 
 	f.State = Signed
 	return f

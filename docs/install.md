@@ -38,6 +38,9 @@ use the default; on a server with a name of its own, that name stands where they
   and a clock, with nothing to type.
 - **Who is in voice.** One row at the top of the panel listing whoever is on the Mumble server,
   by channel, and no row at all when nobody is in there.
+- **Only some Mumble channels, if you want.** An admin can name the channels Matty and the panel
+  show; the rest, and whoever is in them, are not shown. See
+  [Showing only some channels](voice.md#showing-only-some-channels).
 - **Talking from Matty.** If an admin switches it on, the Matty app lists the Mumble channels, as
   Discord lists its voice channels, and people who may watch join them and talk from their phone,
   through this server, on one UDP port. Off by default; see [Talking from Matty](voice.md#talking-from-matty).
@@ -132,10 +135,16 @@ use the default; on a server with a name of its own, that name stands where they
   shows this server's name and icon. It checks that the plugin is a signed release, and the server
   can check that a phone's Matty is the official build. See
   [Signed releases](security.md#signed-releases) and [The app check](security.md#the-app-check).
+- **The oldest Matty the server answers.** An admin can name a minimum Matty version; an older
+  Matty is refused what it asks the plugin for, and Matty 0.1.32 and later close this server with
+  a page asking to update. Blank by default. See [A minimum Matty version](security.md#a-minimum-matty-version).
 - **Notifications without staying connected.** If an admin switches push notifications on, Matty
   0.1.28 and later can notify through a UnifiedPush app on the phone, such as ntfy, whenever
   Mattermost would notify that person, without keeping a connection to this server. Each push is
   end-to-end encrypted. Off by default. See [Push notifications](push.md).
+- **Word of a newer release of the plugin.** If an admin switches Look for updates on, the server
+  looks on GitHub for a newer Matty Plugin and tells the system admins, who install it from the
+  System Console or from Matty. Off by default. See [Plugin updates](updates.md).
 
 ## Install
 
@@ -156,9 +165,9 @@ That is the whole setup. Everything else has a working default.
 A new server starts quiet and neutral. Until the Broadcast Box URL is set, the plugin makes no
 requests at all, the panel says Broadcast Box is not set up yet, and nobody can unlock it with a
 token. There is no banner, no emblem, no No Signal ghost and no theme until an admin adds them, no
-24/7 channel, and every optional service (Mumble, the soundboard, the chat bridge, birthdays, movie and game lookups,
-Twitch, Steam, Hytale) stays off until it is switched on. The plugin makes its bot, `@matty-bot`
-(display name Matty), when it starts.
+24/7 channel, and every optional service (Mumble, the soundboard, the chat bridge, birthdays, movie
+and game lookups, Twitch, Steam, Hytale, push notifications, plugin updates) stays off until it is
+switched on. The plugin makes its bot, `@matty-bot` (display name Matty), when it starts.
 
 It needs **Mattermost 11.11.0 or later**: Matty Plugin supports only the latest Mattermost. Its
 panel runs on the React that Mattermost 11.11 puts on the page (see
@@ -215,8 +224,8 @@ what Matty, the app, calls it on this server. Up to 32 characters, spaces and em
 means Matty. Some things say Matty whatever the name is, because they name the product rather than
 your server: the System Console's own listing and page (and so the paths the panel gives, such as
 **System Console > Plugins > Matty > Broadcast Box**), the server log, and the User-Agent the server sends
-to TMDB, IGDB, Twitch, Steam and Hytale
-(`MattyPlugin/4.3.0 (Mattermost plugin; +https://github.com/vvilla-01/matty-plugin)`, and to push
+to TMDB, IGDB, Twitch, Steam, Hytale and GitHub
+(`MattyPlugin/4.4.0 (Mattermost plugin; +https://github.com/vvilla-01/matty-plugin)`, and to push
 servers `MattyPlugin` alone). The bot and the plugin's Mumble account have
 names of their own, under **Bot account** and **Mumble > Connect as**; both are Matty until you
 change them.
@@ -262,7 +271,7 @@ without anything else to set. See [A theme for everybody](panel.md#a-theme-for-e
 ## Settings
 
 The System Console page is grouped into **sections**, in the order an admin sets things up:
-Broadcast Box, Access, App check, Push notifications, Panel, Streams, Name and artwork, Live badge,
+Broadcast Box, Access, App check, Updates, Push notifications, Panel, Streams, Name and artwork, Live badge,
 Airtime and awards, Clips, Birthdays, Theme, Movies and games, Twitch, Steam, Hytale, Mumble,
 Soundboard, Mumble chat bridge, Bot account, Backup, Troubleshooting. Sections are
 what Mattermost's plugin schema offers; there is no tab mechanism in it, and faking one would mean
@@ -275,14 +284,15 @@ Each setting is also stored in Mattermost's configuration, under `PluginSettings
 The plugin's own controls, next, are the exception: apart from the birthday list, which is saved
 with the page, they have no value there.
 
-Seventeen of the controls are the plugin's own rather than Mattermost's: the let-in list, the app
-check's results, the push notifications' status, the 24/7 pictures, the preview pictures in use, the
-artwork, the recorded airtime, the clips on the server, the birthday list, the Apply to everyone
-button, the remembered titles, the Twitch connections, the Steam connections, the Hytale
-connections, the sounds on the server, the bot's picture and the settings file. They share one look:
-a line saying what each holds, **No Save needed** on the fourteen that act at once rather than with
-the page's Save button (the birthday list is saved with the page, and the app check's results and
-the push notifications' status only show), rows with a picture, pills,
+Nineteen of the controls are the plugin's own rather than Mattermost's: the let-in list, the app
+check's results, the updates' status, the push notifications' status, the 24/7 pictures, the
+preview pictures in use, the artwork, the recorded airtime, the clips on the server, the birthday
+list, the Apply to everyone button, the remembered titles, the Twitch connections, the Steam
+connections, the Hytale connections, talking from Matty's status, the sounds on the server, the
+bot's picture and the settings file. They share one look: a line saying what each holds, **No Save
+needed** on the fifteen that act at once rather than with the page's Save button (the birthday list
+is saved with the page, and the app check's results, the push notifications' status and talking
+from Matty's status only show), rows with a picture, pills,
 and a line under them for what was just done or what went wrong. Anything that cannot be
 undone takes a second click: blocking somebody from clips or preview pictures, clearing a block list,
 deleting, wiping, clearing reports, removing a picture,
@@ -322,7 +332,11 @@ not mark `secret`.
 | Check the Matty app | Check, and show the result | Whether a phone's Matty is the official signed build, on Android's own word: **Off**, **Check, and show the result**, or **Check, and refuse a Matty that fails**. Refusing turns away a Matty that has not passed everywhere but the lock screen; the web panel is never refused. It proves the app's RSA signing certificate, not its post-quantum one, and cannot tell the web panel from a program that hides what it is. See [The app check](security.md#the-app-check). |
 | More signing certificates | *(blank)* | SHA-256 digests of more signing certificates to accept besides Matty's own, one per line, colons and case ignored, for people here who run a build of their own: the certificate Android attests, the first in the app's signing history. |
 | More verified-boot keys | *(blank)* | Verified-boot key digests to accept for phones whose system is signed by a key their owner put in (a locked bootloader with a yellow boot screen), one per line. GrapheneOS's keys are built in. |
-| Results | — | Whether this plugin is a signed release, with its manifest's SHA-256, then every Matty with a verdict that has not expired, newest first, with **Refresh**. See [The app check](security.md#the-app-check). |
+| Minimum Matty version | *(blank)* | The oldest Matty this server answers, such as `0.1.32`; blank for none. An older Matty, or one whose version cannot be read, is refused by the plugin's API everywhere but the few places it needs to show why, and taken out of voice: Matty 0.1.32 and newer then close this server until they are updated. Matty 0.1.31 and older are refused what they ask this plugin for. They still get the list of who is live, which goes to every open client, but cannot play from it. Push notifications go on. Matty says its own version, so a changed copy can get past it. Anything that is not three numbers counts as none, and **Results** says so. A number above the newest Matty turns every Matty away. See [A minimum Matty version](security.md#a-minimum-matty-version). |
+| Results | — | Whether this plugin is a signed release, with its manifest's SHA-256, then the minimum Matty version in force, if any, and every Matty with a verdict that has not expired, newest first, with **Refresh**. See [The app check](security.md#the-app-check). |
+| **Updates** | | |
+| Look for updates | off | Whether this server looks on GitHub for a newer release of Matty Plugin: once a day, once when switched on, and on **Check now**. When one is out, system admins are shown it in the panel and in Matty, and the bot sends each of them one message per version. A system admin installs it with **Install** on the card below or in Matty: the server downloads and checks the bundle, and the admin's own session hands it to Mattermost. That needs this plugin to be a signed release, the release to have this platform's bundle, and Mattermost to take plugin uploads (**Enable Plugins** and **Enable Plugin Uploads** on, **Require Plugin Signature** off). The server then contacts GitHub. See [Plugin updates](updates.md). |
+| Status | — | The version this server runs and its platform, the newest release the last look found and when, **Install** or why a newer one cannot be installed from here, and the last trouble, with **Check now** (at most once a minute for the whole server) and **Refresh**. See [The card](updates.md#the-card). |
 | **Push notifications** | | |
 | Send push notifications to Matty | **off** | Lets anybody signed in register their Matty for push notifications, and sends each an end-to-end encrypted push, through the push server their UnifiedPush app names, whenever Mattermost decides to push to them. Needs Mattermost's own push notifications on (**System Console > Environment > Push Notification Server**). The server then contacts those push servers. See [Push notifications](push.md). |
 | Push servers on your own network | *(blank)* | Push servers on your LAN or this machine, one `host` or `host:port` a line, such as `ntfy.home.lan`; only these may be at a private address or use plain `http://`. See [Your own push server, and the list](push.md#your-own-push-server-and-the-list). |
@@ -407,11 +421,12 @@ not mark `secret`.
 | Names to leave out | `Mattermost` | Bots rather than people. Comma separated. |
 | Match names to usernames | on | Marks your own row and puts headphones on the matching account; the soundboard uses the same match. Only plain-letter Mumble names match. See [Headphones for whoever is on Mumble](awards.md#headphones-for-whoever-is-on-mumble). |
 | Names that differ | *(blank)* | `mumbleName = mattermostUsername`, one per line, such as `alice_ = alice`. |
+| Channels to show | *(blank)* | The Mumble channels Matty and the panel show, one a line, each with the channels under it: a name shows every channel so named, a path such as `Gaming/Duo` or `/Lobby` that channel alone. People elsewhere are not shown in voice. Blank: every channel. Only the first 200 lines are used, and a line longer than 256 characters is not. See [Showing only some channels](voice.md#showing-only-some-channels). |
 | Let people talk from Matty | **off** | People who may watch join the Mumble channels from the Matty app and talk there, through this server, each on a Mumble connection of their own named `<username> (Matty)`. Needs **Show who is in voice**, the port below open and the address phones reach. One Mattermost server only. See [Talking from Matty](voice.md#talking-from-matty). |
 | Voice port (UDP) | `8445` | 1024 to 65535. The one UDP port every phone's voice reaches this server on: open it in the firewall, UDP. See [The port and the firewall](voice.md#the-port-and-the-firewall). |
 | Address for phones | *(blank)* | Where phones reach this server: IPv4 addresses or host names, one a line. Blank: the Site URL's host. See [The address](voice.md#the-address). |
 | The voice server's autoban is off | off | Lifts the plugin's own limit of 8 connections to the Mumble server in two minutes. Only once the Mumble server's autoban no longer counts them. See [The autoban, and the two ways round it](voice.md#the-autoban-and-the-two-ways-round-it). |
-| Talking from Matty | — | Whether the voice port is open, the addresses phones are given, whether Mumble is connected, how many people talk from Matty now, and Mumble's last refusal. See [The card and the alert](voice.md#the-card-and-the-alert). |
+| Talking from Matty | — | Whether the voice port is open, the addresses phones are given, whether Mumble is connected, how many people talk from Matty now, Mumble's last refusal, and the lines of **Channels to show** that match no channel, match more than one, or are not used. See [The card and the alert](voice.md#the-card-and-the-alert). |
 | **Soundboard** | | |
 | Let people play sounds into Mumble | **off** | A speaker in the bar at the bottom of the panel, for people who have linked their stream and are in Mumble: a board of short sounds they play into their own Mumble channel. The plugin's Mumble account then sends audio; check [Setting the soundboard up](voice.md#setting-the-soundboard-up) first. Needs **Show who is in voice**. |
 | Wait between sounds (seconds) | `10` | 3 to 120, after somebody's own sound ends. One sound at a time and 8 a minute in all, whatever this says. |

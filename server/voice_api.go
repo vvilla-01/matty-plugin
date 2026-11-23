@@ -392,6 +392,7 @@ func (p *Plugin) handleVoiceJoin(c *plugin.Context, w http.ResponseWriter, r *ht
 	}
 
 	dial := voiceTalkDialOf(cfg)
+	matty, version := mattyOf(r.UserAgent())
 
 	var answer string
 	joined, err := p.voiceTalk().join(r.Context(), voiceJoinAsk{
@@ -401,6 +402,8 @@ func (p *Plugin) handleVoiceJoin(c *plugin.Context, w http.ResponseWriter, r *ht
 		Channel:   *ask.Channel,
 		Muted:     ask.Muted,
 		Deafened:  ask.Deafened,
+		Matty:     matty,
+		Version:   version,
 	}, dial, func(s *voiceSession) (voicePeer, error) {
 		peer, sdp, err := p.voiceListener().answer(r.Context(), ask.SDP, receive, s)
 		if err != nil {
@@ -444,7 +447,7 @@ func (p *Plugin) handleVoiceMove(w http.ResponseWriter, r *http.Request, userID 
 		return
 	}
 
-	channel, err := p.voiceTalk().move(userID, *ask.Channel)
+	channel, err := p.voiceTalk().move(r.Context(), userID, *ask.Channel)
 	if err != nil {
 		voiceRefusalOf(err).write(w)
 		return
@@ -501,7 +504,8 @@ func (p *Plugin) handleVoiceLeave(w http.ResponseWriter, r *http.Request, userID
 }
 
 // voiceAdminView is GET /api/v1/admin/voice: how talking from Matty stands
-// on the node that answers. Never who is talking.
+// on the node that answers, and the lines of Channels to show that name no
+// channel or more than one. Never who is talking.
 type voiceAdminView struct {
 	// The switch, and whether the voice server is set and connected.
 	On        bool `json:"on"`
@@ -525,6 +529,18 @@ type voiceAdminView struct {
 	// when, in milliseconds.
 	Refused   string `json:"refused,omitempty"`
 	RefusedAt int64  `json:"refusedAt,omitempty"`
+
+	// The lines of Channels to show that name no channel on the voice
+	// server, as the admin wrote them, and the ones that name more than one,
+	// with the channels they name, while it is connected.
+	Unmatched []string       `json:"unmatched,omitempty"`
+	Several   []voiceSeveral `json:"several,omitempty"`
+
+	// The lines of Channels to show that are not used, connected or not:
+	// the ones longer than 256 characters, each as its first 40 characters
+	// and "…", and how many lines come after the first 200.
+	TooLong []string `json:"tooLong,omitempty"`
+	Dropped int      `json:"dropped,omitempty"`
 }
 
 // handleAdminVoice answers GET /api/v1/admin/voice, for system admins.
@@ -547,10 +563,11 @@ func (p *Plugin) voiceAdminNow() voiceAdminView {
 	cfg := p.getConfiguration()
 	state := p.voiceListener().state()
 	talk := p.voiceTalk()
+	voice := p.getVoice()
 
 	view := voiceAdminView{
 		On:        cfg.voiceTalkWanted(),
-		Connected: cfg.EnableVoice && p.getVoice().connected,
+		Connected: cfg.EnableVoice && voice.connected,
 		Port:      cfg.VoiceTalkPort,
 		Addresses: []string{},
 		Talking:   talk.count(),
@@ -569,6 +586,12 @@ func (p *Plugin) voiceAdminNow() voiceAdminView {
 	if refused, at := talk.lastRefusal(); refused != "" {
 		view.Refused, view.RefusedAt = refused, at.UnixMilli()
 	}
+	if view.Connected {
+		view.Unmatched = voice.unmatched
+		view.Several = voice.several
+	}
+	setting := cfg.voiceShownSetting()
+	view.TooLong, view.Dropped = setting.tooLong, setting.dropped
 
 	return view
 }

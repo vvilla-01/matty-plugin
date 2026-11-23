@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "running": "4.9.0",
+  "platform": "linux-amd64",
+  "latest": "4.10.0",
+  "newer": true,
+  "url": "https://github.com/vvilla-01/matty-plugin/releases/tag/v4.10.0",
+  "lookedAt": 1795435200000,
+  "trouble": "GitHub could not be reached for the bundle.",
+  "troubleAt": 1795435200000,
+  "install": {
+    "ready": true
+  },
+  "inVoice": 2
+}

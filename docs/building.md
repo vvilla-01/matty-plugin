@@ -132,17 +132,20 @@ identity, and the SHA-256 of the two certificates.
 as a command, so a bundle, or an unpacked plugin folder, can be checked before it is installed:
 
 ```bash
-go run ./build/checkrelease dist/ceo.villa.matty-4.3.0-linux-amd64.tar.gz
+go run ./build/checkrelease dist/ceo.villa.matty-4.4.0-linux-amd64.tar.gz
 ```
 
 It checks both signatures before it reads anything in the manifest, then the product, the kind, the
 version and the platforms, then every listed file's size and SHA-256, and that what Mattermost loads
 (`plugin.json`, the executables and the web panel's bundle) is listed. It prints
-`signed: ceo.villa.matty 4.3.0 linux-amd64, <n> files`, `unsigned: there is no release folder`, or
+`signed: ceo.villa.matty 4.4.0 linux-amd64, <n> files`, `unsigned: there is no release folder`, or
 `altered:` and why; then the manifest's SHA-256, the two certificates it checked against, and any
 files in the folder that nobody signed. It exits 0 for a signed release, 1 for anything else and 2
 when it was not asked properly. `-rsa-cert` and `-mldsa-cert` check against other certificates,
-`-version` holds the release to a version, and `-platform` to one platform.
+`-version` holds the release to a version, `-platform` to one platform, and `-exact` to what
+**Install** takes: no file the manifest does not list, a bundle of at most 64 MB, and the limits the
+plugin unpacks a downloaded bundle within (4,000 entries, 256 MB). The signing script checks with
+`-exact`.
 
 The plugin runs the same check on its own folder each time it starts, and goes on running whatever
 it finds. It logs the result once ("Matty is a signed release", with the manifest's SHA-256; "Matty
@@ -414,10 +417,11 @@ Broadcast Box  ←── /api/status (poll) ──────────┐
   plugin's own endpoint. Out of the box the plugin makes **no external network requests** at
   runtime beyond Broadcast Box and, when voice is on, Mumble; the optional exceptions are
   [Movies and games][movies-and-games-optional], [Twitch][twitch-optional],
-  [Steam][steam-optional], [Hytale][hytale-optional] and [UnifiedPush push
-  notifications](push.md), all off by default. **Browsers contact somebody other than this server
-  in exactly four cases, all off by default: two for Twitch, one for Steam and one for Hytale; the
-  UnifiedPush push servers are reached by the server and by phones, never by a browser.** (1) The person who presses Connect Twitch and then Continue on Twitch,
+  [Steam][steam-optional], [Hytale][hytale-optional], GitHub for [Plugin
+  updates][updates-optional], and [UnifiedPush push notifications](push.md), all off by default. **Browsers
+  contact somebody other than this server in exactly four cases, all off by default: two for Twitch,
+  one for Steam and one for Hytale; the UnifiedPush push servers are reached by the server and by
+  phones, and GitHub, for the plugin's updates, by the server, never by a browser.** (1) The person who presses Connect Twitch and then Continue on Twitch,
   in the window that opens, reaches `id.twitch.tv` and Twitch's sign-in pages; (2) a viewer who
   presses play on a Twitch stream while **Play Twitch streams inside Matty** is on loads Twitch's
   player, which talks to Twitch and its advertising and measurement partners; (3) the person who
@@ -497,6 +501,14 @@ with which Matty shows the Mumble server's channels and people talk in them from
 (`contract/README.md`, "Voice"). Those routes are not exempt from the app check either, but for
 `POST /voice/leave`: under `require`, a Matty that has not proved itself cannot join, and can always
 leave.
+From 4.4.0 two more. `update` in a system admin's `GET /access` and `updateAlert` in their `GET /me`
+name a newer release of the plugin ([Plugin updates](updates.md); `contract/README.md`, "Plugin
+updates"). `minimum` in the `app` of `GET /access` and `GET /me` is the oldest Matty this server
+answers, while an admin has set one ([A minimum Matty version](security.md#a-minimum-matty-version);
+`contract/README.md`, "A minimum Matty"). A client that does not read them loses nothing, but a
+Matty older than that minimum, or whose User-Agent says no version, is refused with `403` and
+`app_outdated` on the same routes as `app_unverified`, before the app check is asked, and its voice
+session ends when the minimum comes into force.
 
 The rest of this section is the part about people's Steam and Hytale accounts, new in 3.4.0.
 
@@ -524,8 +536,8 @@ The rest of this section is the part about people's Steam and Hytale accounts, n
 
 | Method and path | Who | Body | Answer | Refusal codes |
 | --- | --- | --- | --- | --- |
-| `GET /access` | anybody signed in | — | `{"access", "configured", "contract", "version", "name", "artwork", "release", "app"}`, from 4.1.0 `"push"`, and from 4.3.0 `"voice"` | — |
-| `GET /me` | anybody signed in | — | 3.3.0's fields, plus `steam` and `hytale` (below), and from 4.0.0 `name`, `artwork`, `release` and `app`; from 4.1.0, for system admins, `pushAlert`; from 4.3.0, `voiceTalkAlert` | `store` |
+| `GET /access` | anybody signed in | — | `{"access", "configured", "contract", "version", "name", "artwork", "release", "app"}`, from 4.1.0 `"push"`, from 4.3.0 `"voice"`, and from 4.4.0 `"minimum"` in `"app"` and, for system admins, `"update"` | — |
+| `GET /me` | anybody signed in | — | 3.3.0's fields, plus `steam` and `hytale` (below), and from 4.0.0 `name`, `artwork`, `release` and `app`; from 4.1.0, for system admins, `pushAlert`; from 4.3.0, `voiceTalkAlert`; from 4.4.0, `updateAlert` | `store` |
 | `GET /banners` | anybody signed in | — | from 3.7.0, `{"version", "people": {"<user id>": {"v", "type", "crop"?}}}`, everybody's profile banner, and from 3.8.0 the part of it that shows (`contract/README.md`, "Profile banners"); `304` to a client that sends back the `ETag` of the answer it holds | `store` |
 | `GET /banner?user=&v=` | anybody signed in, loaded as a picture | — | the picture's bytes, as they were sent | `not_found` |
 | `POST /me/banner` | regular members (not guests, not bots), 6 in 10 minutes | the picture, `Content-Type: image/jpeg`, `image/png` or `image/gif`; from 3.8.0 `?crop=x,y,w,h` may say the part to show | `201 {"v", "type", "crop"?}` | `bad_image`, `too_large`, `bad_crop`, `forbidden`, `rate_limited`, `store` |
@@ -564,9 +576,10 @@ server that has given the plugin a name of its own says that name instead:
 | `no_profile` | 409 | That Hytale account has no game profile to show. (Hytale only) |
 | `store` | 503 | Matty could not save that just now. Try again in a moment. |
 
-One refusal can come from any of these routes: `app_unverified` (403), from every route but `GET /access` and
-`GET /me`, to a request from Matty whose session has not passed the app check while an admin has it set to refuse. It is in
-`contract/README.md`, "A refusal".
+Two refusals can come from any of these routes but `GET /access` and `GET /me`: from 4.4.0
+`app_outdated` (403), to a request from a Matty older than the minimum an admin has set, and
+`app_unverified` (403), to a request from Matty whose session has not passed the app check while an
+admin has it set to refuse. Both are in `contract/README.md`, "A refusal".
 
 **`/me`'s two new fields**, the same shape for both. Each is absent when that service is switched
 off and the reader has nothing there:
@@ -640,7 +653,7 @@ own.
 | Event | To | Do |
 | --- | --- | --- |
 | `accounts` | everybody, with an empty payload | If the reader may watch and a screen of the plugin's or a profile is showing, `GET /accounts` (at most once a second); otherwise read it the next time one shows. It says only that something changed. The first change of a quiet ten seconds is told at once; there is never more than one in any ten. |
-| `me` | one person, or everybody after an admin's Delete all, a change to the server's name or artwork or to the app check's setting or what it accepts | What the server holds about the reader may have changed: their access (a link, an unlink, a let-in), or their own Twitch, Steam or Hytale connection (connected, disconnected, blocked or taken over); or, sent to everybody, the server's name for the plugin or its artwork, or the app check's rules (a Matty then proves itself again if its verdict no longer counts). It carries `name` and `artwork` as `GET /access` gives them, and nothing about anybody. Ask again: `GET /access`, and for a client that shows connections, `GET /me`. It never says what changed. |
+| `me` | one person, or everybody after an admin's Delete all, a change to the server's name or artwork, to the app check's setting or what it accepts, or to the minimum Matty version in force | What the server holds about the reader may have changed: their access (a link, an unlink, a let-in), or their own Twitch, Steam or Hytale connection (connected, disconnected, blocked or taken over); or, sent to everybody, the server's name for the plugin or its artwork, or the app check's rules (a Matty then proves itself again if its verdict no longer counts), or the oldest Matty this server answers. It carries `name` and `artwork` as `GET /access` gives them, and nothing about anybody. Ask again: `GET /access`, and for a client that shows connections, `GET /me`. It never says what changed. |
 
 From 3.6.0 `me` is the one event about a reader's own state: until then there were three, `access`,
 `twitch_link` and `account_link`, which carried nothing either and all meant this. `streams`
@@ -652,3 +665,4 @@ when somebody looks at a board or a profile (`contract/README.md`, "Awards and t
 [twitch-optional]: up-next.md#twitch-optional
 [steam-optional]: up-next.md#steam-optional
 [hytale-optional]: up-next.md#hytale-optional
+[updates-optional]: updates.md

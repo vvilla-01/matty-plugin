@@ -2,6 +2,8 @@
   "self": {
     "channel": 2,
     "muted": false,
-    "suppressed": false
+    "suppressed": false,
+    "selfMuted": true,
+    "selfDeafened": false
   }
 }

@@ -132,11 +132,13 @@ func botCanSpeak(self *gumble.User) (bool, string) {
 }
 
 // voicePresser is who a press is read for: the Mattermost account and its
-// username, and this node's phone sessions (voice_phones.go), nil for none.
+// username, this node's phone sessions (voice_phones.go), nil for none, and
+// the channels the roster shows (Channels to show), nil for every one.
 type voicePresser struct {
 	userID   string
 	username string
 	phones   *voicePhoneRegistry
+	shown    map[uint32]bool
 }
 
 // owns is whether a Mumble session is the presser's, by the rule the roster
@@ -150,6 +152,22 @@ func (who voicePresser) owns(user *gumble.User, overrides map[string]string, cfg
 	}
 
 	return voiceNameMatches(user.Name, who.username, overrides, cfg)
+}
+
+// sees is whether a session is in a channel the roster shows. Somebody in a
+// channel that is not shown is not in voice as far as the panel and Matty
+// are told, so the soundboard neither finds them there nor plays into it.
+func (who voicePresser) sees(user *gumble.User) bool {
+	if who.shown == nil {
+		return true
+	}
+
+	var channel uint32
+	if user.Channel != nil {
+		channel = user.Channel.ID
+	}
+
+	return who.shown[channel]
 }
 
 // readVoice is the presser's state and VillaNET's, from gumble's live state in
@@ -168,7 +186,7 @@ func readVoice(client *gumble.Client, who voicePresser, cfg *configuration, perm
 			if user == nil || user == client.Self {
 				continue
 			}
-			if who.owns(user, overrides, cfg) {
+			if who.owns(user, overrides, cfg) && who.sees(user) {
 				matched = append(matched, user)
 			}
 		}
@@ -251,7 +269,7 @@ func (p *Plugin) voiceStateOf(userID string, cfg *configuration) voiceRead {
 
 // presser is a Mattermost account as a press is read for it.
 func (p *Plugin) presser(userID, username string) voicePresser {
-	return voicePresser{userID: userID, username: username, phones: &p.voicePhones}
+	return voicePresser{userID: userID, username: username, phones: &p.voicePhones, shown: p.shownVoiceChannelIDs()}
 }
 
 // permissions is the stand-in a test gave, or gumble's.
@@ -471,11 +489,13 @@ func (pl *soundPlayer) run() {
 }
 
 // presserStillThere is the check before every packet after the first: the
-// same session, in the same channel, not muted, deafened or suppressed, and
-// still theirs, by name or as their phone session. A read lock over gumble's maps, cheap at fifty a
-// second; WriteAudio takes the connection's own lock separately.
+// same session, in the same channel, not muted, deafened or suppressed, in a
+// channel the roster shows, and still theirs, by name or as their phone
+// session. A read lock over gumble's maps, cheap at fifty a second;
+// WriteAudio takes the connection's own lock separately.
 func (pl *soundPlayer) presserStillThere(job *soundJob, session, channelID uint32, cfg *configuration, overrides map[string]string) bool {
 	there := false
+	who := pl.plugin.presser(job.userID, job.username)
 
 	pl.client.Do(func() {
 		user := pl.client.Users[session]
@@ -486,7 +506,7 @@ func (pl *soundPlayer) presserStillThere(job *soundJob, session, channelID uint3
 			return
 		}
 
-		there = pl.plugin.presser(job.userID, job.username).owns(user, overrides, cfg)
+		there = who.owns(user, overrides, cfg) && who.sees(user)
 	})
 
 	return there

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mattermost/mattermost/server/public/model"
 
@@ -42,6 +43,7 @@ type configuration struct {
 	VoiceHiddenNames    string
 	VoiceNameMap        string
 	VoiceMatchUsernames bool
+	VoiceChannelsShown  string
 	EnableChatBridge    bool
 	BridgeChannel       string
 	BridgeIgnore        string
@@ -139,6 +141,13 @@ type configuration struct {
 	VoiceTalkPort     int
 	VoiceTalkAddress  string
 	VoiceTalkNoBudget bool
+
+	// 4.4.0: whether this server looks for updates of the plugin itself
+	// (update.go), off unless an admin switches it on, and with it off
+	// nothing is asked of GitHub. Then the oldest Matty this server answers
+	// (app_version.go): "N.N.N", and blank, or anything else, for none.
+	EnableUpdates     bool
+	MinimumAppVersion string
 
 	// No AccessContact any more. "Who to ask" fed only the lock screen's
 	// line telling people with no token whom to ask to be let in, and in
@@ -286,8 +295,8 @@ func sameMumbleConnection(a, b *configuration) bool {
 }
 
 // sameVoiceRoster reports whether two configurations, on the same connection,
-// would show the same roster: whether it is shown at all, who is left out, and
-// how names are matched to accounts. A roster is otherwise only rebuilt when
+// would show the same roster: whether it is shown at all, who is left out,
+// which channels are shown, and how names are matched to accounts. A roster is otherwise only rebuilt when
 // somebody joins, leaves or changes state — and since the headphones put it on
 // people's posts and profiles, a correction to a name match should show when it
 // is saved, not whenever somebody next fidgets on Mumble.
@@ -299,7 +308,8 @@ func sameVoiceRoster(a, b *configuration) bool {
 	return a.EnableVoice == b.EnableVoice &&
 		a.VoiceHiddenNames == b.VoiceHiddenNames &&
 		a.VoiceNameMap == b.VoiceNameMap &&
-		a.VoiceMatchUsernames == b.VoiceMatchUsernames
+		a.VoiceMatchUsernames == b.VoiceMatchUsernames &&
+		a.VoiceChannelsShown == b.VoiceChannelsShown
 }
 
 // ignoredBridgeAccounts are Mattermost usernames whose posts are never sent to
@@ -460,10 +470,69 @@ func (c *configuration) voiceTalkWanted() bool {
 // voiceTalkAddresses are the lines of the address setting, trimmed, blank
 // lines and repeats left out.
 func (c *configuration) voiceTalkAddresses() []string {
+	return distinctLines(c.VoiceTalkAddress)
+}
+
+// How much of Channels to show is used: the first so many lines, and of
+// those only the ones no longer than so many characters; and how much of a
+// line that is too long the card quotes.
+const (
+	voiceShownMostLines   = 200
+	voiceShownLongestLine = 256
+	voiceShownQuoted      = 40
+)
+
+// voiceShownSetting is Channels to show as read. lines are the lines used,
+// trimmed, blank lines and repeats left out: each a channel's name, or a
+// path of names joined by "/" from below the root (voiceShownLine). Of the
+// first voiceShownMostLines lines, one longer than voiceShownLongestLine
+// characters is not used, and tooLong holds it as the card quotes it, its
+// first voiceShownQuoted characters and "…"; dropped is how many lines come
+// after those and are not used either.
+type voiceShownSetting struct {
+	lines   []string
+	tooLong []string
+	dropped int
+}
+
+func (c *configuration) voiceShownSetting() voiceShownSetting {
+	all := distinctLines(c.VoiceChannelsShown)
+
+	var setting voiceShownSetting
+	if len(all) > voiceShownMostLines {
+		setting.dropped = len(all) - voiceShownMostLines
+		all = all[:voiceShownMostLines]
+	}
+	for _, line := range all {
+		if utf8.RuneCountInString(line) > voiceShownLongestLine {
+			setting.tooLong = append(setting.tooLong, cutRunes(line, voiceShownQuoted)+"…")
+			continue
+		}
+		setting.lines = append(setting.lines, line)
+	}
+
+	return setting
+}
+
+// listed is whether Channels to show has a line at all, used or not. With
+// none, every channel is shown.
+func (s voiceShownSetting) listed() bool {
+	return len(s.lines) > 0 || len(s.tooLong) > 0
+}
+
+// voiceChannelsShown are the lines of Channels to show that are used
+// (voiceShownSetting).
+func (c *configuration) voiceChannelsShown() []string {
+	return c.voiceShownSetting().lines
+}
+
+// distinctLines are the lines of a setting, trimmed, blank lines and lines
+// that repeat another without regard to case left out.
+func distinctLines(text string) []string {
 	var lines []string
 	seen := map[string]bool{}
 
-	for _, line := range strings.Split(c.VoiceTalkAddress, "\n") {
+	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || seen[strings.ToLower(line)] {
 			continue

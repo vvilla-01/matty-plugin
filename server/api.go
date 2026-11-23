@@ -224,6 +224,10 @@ type meResponse struct {
 	// Admin-only, from 4.3.0: talking from Matty is switched on and its
 	// voice port is down, and why. See voice_api.go.
 	VoiceTalkAlert string `json:"voiceTalkAlert,omitempty"`
+
+	// Admin-only, from 4.4.0: a newer release of the plugin is out, while
+	// Look for updates is on, and its page. See update.go.
+	UpdateAlert *updateWord `json:"updateAlert,omitempty"`
 }
 
 type profileResponse struct {
@@ -373,8 +377,13 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// The app check's gate, while it is set to refuse a Matty that has not
-	// passed: before everything below, the clips included (app_check.go).
+	// The oldest Matty this server answers, while one is set, and then the
+	// app check's gate, while it is set to refuse a Matty that has not
+	// passed: before everything below, the clips included (app_version.go,
+	// app_check.go).
+	if !p.passAppVersionGate(w, r) {
+		return
+	}
 	if !p.passAppCheckGate(w, r, c, userID) {
 		return
 	}
@@ -698,6 +707,17 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 	case "/api/v1/admin/voice":
 		p.handleAdminVoice(w, r, userID)
 
+	// How updates for the plugin stand, Check now, and the checked bundle
+	// of a newer version for an admin's client to install: see update.go.
+	case "/api/v1/admin/update":
+		p.handleAdminUpdate(w, r, userID)
+
+	case "/api/v1/admin/update/check":
+		p.handleAdminUpdateCheck(w, r, userID)
+
+	case "/api/v1/admin/update/bundle":
+		p.handleAdminUpdateBundle(w, r, userID)
+
 	// Sounds on the server, in the System Console: see sounds_admin.go.
 	case "/api/v1/admin/sounds":
 		p.handleAdminSounds(w, r, userID)
@@ -1008,6 +1028,11 @@ type accessResponse struct {
 	// why not (voice.go). From 4.3.0, and only while voice is switched on.
 	// From memory: no store read.
 	Voice *voiceWord `json:"voice,omitempty"`
+
+	// For system admins only: a newer release of the plugin is out, while
+	// Look for updates is on, its page, and whether a bundle of it can be
+	// had from here (update.go). From 4.4.0. From memory: no store read.
+	Update *accessUpdateWord `json:"update,omitempty"`
 }
 
 // handleAccess answers GET /api/v1/access: the caller's access, and which
@@ -1026,13 +1051,20 @@ func (p *Plugin) handleAccess(w http.ResponseWriter, userID, sessionID string) {
 		Access:     accessUnknown,
 		Configured: cfg.validate() == nil,
 		Contract:   contractRevision,
-		Version:    manifestVersion,
+		Version:    runningVersion(),
 		Name:       p.brandName(),
 		Artwork:    p.artwork(),
 		Release:    p.releaseWordNow(),
 		App:        p.appWordFor(sessionID, userID, cfg),
 		Push:       p.pushWordNow(cfg),
 		Voice:      p.voiceWordNow(cfg),
+	}
+
+	// Who is a system admin is asked only while the setting is on and a
+	// newer version is known: then every /access costs that one question
+	// of Mattermost, and no store read.
+	if update := p.accessUpdateWordNow(cfg); update != nil && p.isSystemAdmin(userID) {
+		response.Update = update
 	}
 
 	// A store that did not answer is "unknown", never a guess, as on /me: a
@@ -1061,7 +1093,7 @@ func (p *Plugin) handleMeIn(w http.ResponseWriter, userID, sessionID string) {
 	response := meResponse{
 		UserID:      userID,
 		Contract:    contractRevision,
-		Version:     manifestVersion,
+		Version:     runningVersion(),
 		Name:        p.brandName(),
 		Artwork:     p.artwork(),
 		Release:     p.releaseWordNow(),
@@ -1136,6 +1168,7 @@ func (p *Plugin) handleMeIn(w http.ResponseWriter, userID, sessionID string) {
 		response.ReleaseAlert = p.releaseAlertNow()
 		response.PushAlert = p.pushAlertFor(cfg)
 		response.VoiceTalkAlert = p.voiceTalkAlertFor(cfg)
+		response.UpdateAlert = p.updateWordNow(cfg)
 	}
 
 	writeJSON(w, http.StatusOK, response)

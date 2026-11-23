@@ -45,6 +45,24 @@ type talkScene struct {
 
 	// The store does not answer access reads.
 	storeDown bool
+
+	// When each session's own messages went out, as the plugin sent them.
+	sent map[uint32][]talkSend
+}
+
+// talkSend is one of a session's own messages as the plugin sent it: when it
+// had gone out, and whether it was a move.
+type talkSend struct {
+	at   time.Time
+	move bool
+}
+
+// sendsOf is what a session sent of its own, by the plugin's clock.
+func (s *talkScene) sendsOf(session uint32) []talkSend {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return append([]talkSend(nil), s.sent[session]...)
 }
 
 func newTalkScene(t *testing.T) *talkScene {
@@ -58,9 +76,26 @@ func newTalkScene(t *testing.T) *talkScene {
 		phones:    map[uint32]string{},
 		gone:      map[string]bool{},
 		sessions:  map[string]voiceSessionRead{},
+		sent:      map[uint32][]talkSend{},
 	}
 
 	s.r = newVoiceSessions(s.clock, voiceTestSafely(t))
+	s.r.dial = func(ctx context.Context, dial voiceMumbleDial, handler voiceMumbleHandler, safely func(string, func()) bool) (*voiceMumble, error) {
+		m, err := dialVoiceMumble(ctx, dial, handler, safely)
+		if m != nil {
+			// Nothing of its own goes out before the dial has returned.
+			session := m.session
+			m.lock.Lock()
+			m.sends = func(at time.Time, move bool) {
+				s.lock.Lock()
+				s.sent[session] = append(s.sent[session], talkSend{at: at, move: move})
+				s.lock.Unlock()
+			}
+			m.lock.Unlock()
+		}
+
+		return m, err
+	}
 	s.r.moveWait = 400 * time.Millisecond
 	s.r.channelKnown = func(channel uint32) (bool, bool) {
 		s.lock.Lock()
@@ -300,7 +335,7 @@ func TestVoiceTalkMoves(t *testing.T) {
 	assert.Less(t, time.Since(started), s.r.moveWait, "answered at once")
 	assert.Equal(t, uint32(0), alice.answer.Channel)
 
-	channel, err := s.r.move(talkAlice, 2)
+	channel, err := s.r.move(context.Background(), talkAlice, 2)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), channel)
 	user, _ := s.server.user(alice.answer.Session)
@@ -309,7 +344,7 @@ func TestVoiceTalkMoves(t *testing.T) {
 	t.Run("full", func(t *testing.T) {
 		s.server.add("erin", 4)
 		s.server.add("victor", 4)
-		_, err := s.r.move(talkAlice, 4)
+		_, err := s.r.move(context.Background(), talkAlice, 4)
 		refused := refusal(t, err)
 		assert.Equal(t, http.StatusForbidden, refused.Status)
 		assert.Equal(t, codeVoiceDenied, refused.Code)
@@ -318,11 +353,11 @@ func TestVoiceTalkMoves(t *testing.T) {
 
 	t.Run("denied", func(t *testing.T) {
 		s.server.set(func(f *relayMumble) { f.deny[3] = "" })
-		_, err := s.r.move(talkAlice, 3)
+		_, err := s.r.move(context.Background(), talkAlice, 3)
 		assert.Equal(t, "The voice server did not let you into that channel.", refusal(t, err).Sentence)
 
 		s.server.set(func(f *relayMumble) { f.deny[3] = "Ask an admin first" })
-		_, err = s.r.move(talkAlice, 3)
+		_, err = s.r.move(context.Background(), talkAlice, 3)
 		assert.Equal(t, "The voice server did not let you into that channel: Ask an admin first.", refusal(t, err).Sentence)
 	})
 
@@ -331,7 +366,7 @@ func TestVoiceTalkMoves(t *testing.T) {
 		defer s.server.set(func(f *relayMumble) { f.silentMoves = false })
 
 		started := time.Now()
-		_, err := s.r.move(talkAlice, 1)
+		_, err := s.r.move(context.Background(), talkAlice, 1)
 		assert.GreaterOrEqual(t, time.Since(started), s.r.moveWait)
 		refused := refusal(t, err)
 		assert.Equal(t, codeVoiceDenied, refused.Code)
@@ -339,7 +374,7 @@ func TestVoiceTalkMoves(t *testing.T) {
 	})
 
 	t.Run("a channel the roster does not know", func(t *testing.T) {
-		_, err := s.r.move(talkAlice, 99)
+		_, err := s.r.move(context.Background(), talkAlice, 99)
 		refused := refusal(t, err)
 		assert.Equal(t, http.StatusNotFound, refused.Status)
 		assert.Equal(t, codeNotFound, refused.Code)
@@ -356,14 +391,14 @@ func TestVoiceTalkMoves(t *testing.T) {
 			s.lock.Unlock()
 		}()
 
-		_, err := s.r.move(talkAlice, 1)
+		_, err := s.r.move(context.Background(), talkAlice, 1)
 		refused := refusal(t, err)
 		assert.Equal(t, http.StatusServiceUnavailable, refused.Status)
 		assert.Equal(t, "The voice server is not connected.", refused.Sentence)
 	})
 
 	t.Run("nobody in voice", func(t *testing.T) {
-		_, err := s.r.move(talkBob, 1)
+		_, err := s.r.move(context.Background(), talkBob, 1)
 		refused := refusal(t, err)
 		assert.Equal(t, http.StatusConflict, refused.Status)
 		assert.Equal(t, "You are not in a voice channel.", refused.Sentence)
@@ -490,8 +525,13 @@ func TestVoiceTalkSendsNothingUpWhileMutedOrSuppressed(t *testing.T) {
 	assert.True(t, deafened)
 	ts = speak(s, session, alice.peer, ts, 5)
 
+	// Unmuted as asked: the voice goes up only once the voice server holds
+	// the session unmuted, and the phone is told it does.
 	_, _, err = s.r.state(talkAlice, false, false)
 	require.NoError(t, err)
+	require.Eventually(t, func() bool { self, _ := alice.peer.lastSelf(); return !self.SelfMuted && !self.SelfDeafened }, 5*time.Second, 5*time.Millisecond)
+	user, _ := s.server.user(alice.answer.Session)
+	assert.False(t, user.selfMute || user.selfDeaf)
 
 	// Server muted, then suppressed: the phone is told, and nothing goes up.
 	s.server.serverMute(alice.answer.Session, true, false)

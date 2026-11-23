@@ -52,6 +52,11 @@
 // are not a setting, so only a plugin built with the villanet_standin tag
 // (make standin-linux) asks this Steam; a release never does.
 //
+// With -releases DIR it also stands in for GitHub's releases of the plugin,
+// for the plugin's own updates: the newest release, its bundles and the two
+// certificates they are signed with, from a folder
+// build/make-standin-update.sh makes. Only the stand-in build asks here too.
+//
 // Never part of a release: nothing under build/ is in the plugin bundle.
 package main
 
@@ -127,6 +132,7 @@ func main() {
 	steam := flag.String("steam", "victor=Factorio,alice=Hades,bob,carol", "Steam accounts there are from the start: name, or name=game for somebody in a game, comma separated")
 	mumble := flag.String("mumble", "127.0.0.1:64738", "where the stand-in Mumble server listens; empty for none")
 	voice := flag.String("voice", "bob,carol=muted,Guest", "who is in voice from the start: name, name=muted or name=deafened, comma separated")
+	releases := flag.String("releases", "", "a folder of stand-in releases of the plugin (build/make-standin-update.sh), served as GitHub serves its releases; empty for none")
 	flag.Parse()
 
 	api, err := newBoxAPI()
@@ -158,9 +164,12 @@ func main() {
 		}
 	}
 
-	mux := b.routes(list(*steam))
+	mux := b.routes(list(*steam), *releases)
 	log.Printf("stand-in Steam on http://%s (accounts: %s)", *addr, *steam)
 	log.Printf("stand-in push server on http://%s/push/", *addr)
+	if *releases != "" {
+		log.Printf("stand-in releases of the plugin on http://%s from %s", *addr, *releases)
+	}
 
 	if *mumble != "" {
 		server, err := standin.NewMumble(list(*voice)...)
@@ -184,9 +193,10 @@ func main() {
 }
 
 // routes is everything served on the one port: Broadcast Box, the steering
-// of its streams, the stand-in Steam with these accounts and the stand-in push
-// server.
-func (b *box) routes(steamAccounts []string) *http.ServeMux {
+// of its streams, the stand-in Steam with these accounts, the stand-in push
+// server and the plugin's stand-in releases from the folder releases ("" for
+// none).
+func (b *box) routes(steamAccounts []string, releases string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", b.status)
 	mux.HandleFunc("/api/whip/profile", b.profile)
@@ -196,6 +206,7 @@ func (b *box) routes(steamAccounts []string) *http.ServeMux {
 
 	standin.NewSteam(steamAccounts...).Routes(mux)
 	standin.NewPush().Routes(mux)
+	standin.NewReleases(releases).Routes(mux)
 
 	return mux
 }

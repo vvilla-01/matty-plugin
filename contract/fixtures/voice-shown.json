@@ -1,0 +1,58 @@
+{
+  "voice": {
+    "connected": true,
+    "channels": [
+      {
+        "id": 2,
+        "name": "Gaming",
+        "depth": 0
+      },
+      {
+        "id": 4,
+        "name": "Duo",
+        "parent": 2,
+        "depth": 1,
+        "max": 2
+      },
+      {
+        "id": 1,
+        "name": "Lobby",
+        "depth": 0
+      }
+    ],
+    "people": [
+      {
+        "session": 5,
+        "name": "Bob",
+        "userId": "u-bob",
+        "channel": 4,
+        "muted": true,
+        "deaf": true
+      },
+      {
+        "session": 12,
+        "name": "dave (Matty)",
+        "userId": "u-dave",
+        "channel": 2,
+        "phone": true
+      },
+      {
+        "session": 3,
+        "name": "Victor",
+        "userId": "u-victor",
+        "channel": 1
+      }
+    ]
+  },
+  "people": {
+    "u-bob": {
+      "voice": "muted"
+    },
+    "u-dave": {
+      "voice": "open"
+    },
+    "u-victor": {
+      "voice": "open"
+    }
+  }
+}

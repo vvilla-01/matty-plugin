@@ -3,6 +3,7 @@ import React from 'react';
 import {formatDuration} from '../format';
 import {PRODUCT_NAME} from '../name';
 import {PUSH_SECTION, pushAlertText} from '../pushAdmin';
+import {UPDATE_SECTION, updateAlertText} from '../updateAdmin';
 import {VOICE_SECTION, voiceTalkAlertText} from '../voiceAdmin';
 import {dayDate, viewerZone} from '../time';
 import type {LedgerAlert, Me, ReleaseAlert} from '../types';
@@ -16,7 +17,7 @@ import type {LedgerAlert, Me, ReleaseAlert} from '../types';
 function hasAdminAlerts(me: Me | null): boolean {
     return Boolean(me?.isAdmin && (me.letInAlert || me.voiceAlert || me.birthdayAlert || me.airtimeAlert || me.clipsAlert || me.twitch?.problem ||
         me.steam?.problem || me.hytale?.problem || me.soundAlert || me.achievementsAlert || ledgerLines(me.ledgerAlert).length > 0 ||
-        releaseLines(me.releaseAlert) || pushAlertText(me.pushAlert) || voiceTalkAlertText(me.voiceTalkAlert)));
+        releaseLines(me.releaseAlert) || pushAlertText(me.pushAlert) || voiceTalkAlertText(me.voiceTalkAlert) || updateAlertText(me.updateAlert)));
 }
 
 // Where in the System Console something is put right: the plugin's page,
@@ -84,6 +85,7 @@ export const AdminAlerts: React.FC<{me: Me | null}> = ({me}) => {
     const release = releaseLines(me.releaseAlert);
     const push = pushAlertText(me.pushAlert);
     const voiceTalk = voiceTalkAlertText(me.voiceTalkAlert);
+    const update = updateAlertText(me.updateAlert);
 
     return (
         <>
@@ -105,6 +107,27 @@ export const AdminAlerts: React.FC<{me: Me | null}> = ({me}) => {
                             <b>{consolePath('App check')}</b>{'.'}
                         </>
                     )}
+                </div>
+            )}
+
+            {/* A newer release of the plugin is out: its page, which the
+                server builds, as a link only where it is a release's page. */}
+            {update && (
+                <div className='vntv-notice'>
+                    {update.text}
+                    {update.linked ? (
+                        <>
+                            {' '}
+                            <a
+                                href={update.url}
+                                target='_blank'
+                                rel='noopener noreferrer'
+                            >{'See what is new'}</a>
+                            {'.'}
+                        </>
+                    ) : null}
+                    {' Only you can see this. To install it, open '}
+                    <b>{consolePath(UPDATE_SECTION)}</b>{'.'}
                 </div>
             )}
 

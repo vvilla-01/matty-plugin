@@ -570,7 +570,7 @@ card: the kind, the words and the title's details, never when it was said and ne
 ### Why the pop-out link defaults to off
 
 For Broadcast Box, the plugin server only ever talks to **Broadcast Box URL**, which should be a LAN
-address. (Its other outbound connections, Mumble, the lookups and Twitch, are listed under
+address. (Its other outbound connections, Mumble, the lookups, Twitch, Steam, Hytale, the UnifiedPush push servers and GitHub, are listed under
 [Security posture](security.md#security-posture).) It never touches your reverse proxy. The one thing that sends a *browser* to the proxy is the **Pop out** link.
 
 If the public site is behind HTTP Basic Auth, a viewer who clicks that link gets an auth challenge, and a

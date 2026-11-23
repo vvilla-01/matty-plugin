@@ -937,7 +937,7 @@ const reply = (status, body, headers = {}) => {
     return response;
 };
 
-const real = await load('client.ts', {'./manifest': transpiled('manifest.ts')});
+const real = await load('client.ts', {'./manifest': transpiled('manifest.ts'), './updateAdmin': transpiled('updateAdmin.ts')});
 
 await check('a re-read carries the tag in hand, and "that one still" is nothing to take', async () => {
     // Nothing in hand: no condition, and the answer comes with the tag to keep.

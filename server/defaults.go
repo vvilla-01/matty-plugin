@@ -41,6 +41,11 @@ var sectionDefaults = map[string]any{
 	"AppCheck":             "report",
 	"AppCheckCertificates": "",
 	"AppCheckBootKeys":     "",
+	"MinimumAppVersion":    "",
+
+	// Updates. UpdateStatus is a component with no value, so it has no
+	// default.
+	"EnableUpdates": false,
 
 	// Push notifications. PushStatus is a component with no value, so it
 	// has no default.
@@ -128,6 +133,7 @@ var sectionDefaults = map[string]any{
 	"VoiceHiddenNames":    "Mattermost",
 	"VoiceMatchUsernames": true,
 	"VoiceNameMap":        "",
+	"VoiceChannelsShown":  "",
 
 	// Talking from Matty. VoiceTalkStatus is a component with no value, so
 	// it has no default.

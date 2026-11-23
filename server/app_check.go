@@ -101,6 +101,10 @@ type appWord struct {
 	// VersionCode is the version the verdict was for, as Android attested
 	// it, so the app knows to prove itself again once it is updated.
 	VersionCode int64 `json:"versionCode,omitempty"`
+
+	// Minimum is the oldest Matty this server answers, while one is set,
+	// whatever the check's setting (app_version.go).
+	Minimum string `json:"minimum,omitempty"`
 }
 
 func sessionOf(c *plugin.Context) string {
@@ -114,7 +118,7 @@ func sessionOf(c *plugin.Context) string {
 // appWordFor is the caller's appWord. A store that cannot be read is said as
 // none, with why: /access never fails over this.
 func (p *Plugin) appWordFor(sessionID, userID string, cfg *configuration) appWord {
-	word := appWord{Check: cfg.appCheckMode(), State: "none"}
+	word := appWord{Check: cfg.appCheckMode(), State: "none", Minimum: cfg.appMinimum()}
 	if word.Check == appCheckOff {
 		return word
 	}
@@ -499,9 +503,13 @@ type appCheckPersonView struct {
 
 // appCheckAdminView is GET /api/v1/admin/appcheck: every person with a
 // verdict that has not expired, the latest first, and each of their
-// sessions'. "claims" in each is the app's own word.
+// sessions'. "claims" in each is the app's own word. Minimum is the oldest
+// Matty this server answers, while one is set; Problem says which lines of
+// the two lists of digests were left out, and that Minimum Matty version
+// counts as none when it is not a version.
 type appCheckAdminView struct {
 	Check   string               `json:"check"`
+	Minimum string               `json:"minimum,omitempty"`
 	Problem string               `json:"problem,omitempty"`
 	People  []appCheckPersonView `json:"people"`
 }
@@ -521,7 +529,8 @@ func (p *Plugin) handleAdminAppCheck(w http.ResponseWriter, r *http.Request, use
 
 	cfg := p.getConfiguration()
 	now := p.appCheck().now()
-	view := appCheckAdminView{Check: cfg.appCheckMode(), Problem: cfg.appCheckProblem(), People: []appCheckPersonView{}}
+	problem := strings.TrimSpace(cfg.appCheckProblem() + " " + cfg.appMinimumProblem())
+	view := appCheckAdminView{Check: cfg.appCheckMode(), Minimum: cfg.appMinimum(), Problem: problem, People: []appCheckPersonView{}}
 
 	people, err := p.readIndex(kvAppCheckPeople, now)
 	if err != nil {

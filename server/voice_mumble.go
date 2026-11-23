@@ -54,8 +54,20 @@ const (
 	// A read waits this long, which two pings and their answers fit in.
 	voiceMumbleReadTimeout = 40 * time.Second
 
-	// How long a move waits for the voice server to confirm it or refuse it.
+	// How long a move waits for the voice server to confirm it or refuse it,
+	// from when it goes out.
 	voiceMoveWait = 3 * time.Second
+
+	// The voice server takes a user's own state messages (moves, self mute
+	// and self deafen) only so fast: Murmur's messageburst (5) at once, then
+	// messagelimit (1) a second, and it drops the rest without a word. So a
+	// session's own messages go at least this far apart...
+	voiceStateGap = time.Second
+
+	// ...and a self mute or deafen that the voice server's word has not
+	// followed within this long is sent again: only its word proves that a
+	// message arrived.
+	voiceStateResend = 2 * time.Second
 
 	// Mumble's version announced, 1.3.0: the voice server then speaks to this
 	// connection in the legacy audio format, the one framed here.
@@ -124,12 +136,30 @@ type voiceMumbleSelf struct {
 
 	// Not allowed to speak in its channel.
 	Suppressed bool
+
+	// The session's own mute and deafen as the voice server holds them,
+	// which is what it goes by, whatever was asked of it. Coupled as the
+	// voice server couples them: a self deafen self mutes too, and a self
+	// unmute self undeafens too.
+	SelfMute bool
+	SelfDeaf bool
 }
 
 // muted is whether the voice server lets nothing of the session be heard:
 // muted or deafened by it.
 func (s voiceMumbleSelf) muted() bool {
 	return s.Mute || s.Deaf
+}
+
+// voiceSelfPair is a session's own mute and deafen, deafened being muted
+// too.
+type voiceSelfPair struct {
+	mute, deaf bool
+}
+
+// held is the session's own mute and deafen as the voice server holds them.
+func (s voiceMumbleSelf) held() voiceSelfPair {
+	return voiceSelfPair{mute: s.SelfMute, deaf: s.SelfDeaf}
 }
 
 // voiceMumbleHandler is what a phone session's connection tells as it reads.
@@ -141,7 +171,8 @@ type voiceMumbleHandler interface {
 	// number they sent it with, the Opus payload and the last-frame flag.
 	mumbleAudio(sender uint32, sequence int64, payload []byte, final bool)
 
-	// Its channel, server mute or suppression changed.
+	// Its channel, server mute, suppression, or self mute or deafen as the
+	// voice server holds them changed.
 	mumbleSelf(self voiceMumbleSelf)
 
 	// Somebody else left the voice server.
@@ -185,11 +216,30 @@ type voiceMumble struct {
 	// One move at a time.
 	moveLock sync.Mutex
 
-	lock     sync.Mutex
-	self     voiceMumbleSelf
-	selfMute bool
-	selfDeaf bool
-	moving   *voiceMovePending
+	lock   sync.Mutex
+	self   voiceMumbleSelf
+	moving *voiceMovePending
+
+	// The session's own mute and deafen as they should be on the voice
+	// server, once a join or a change has said (wantedSet); the last state
+	// message sent, when, and whether the voice server's word has yet to
+	// follow it (sentOpen); and when the last of the session's own messages,
+	// a move or its state, went out. reconcile sends from these, and nothing
+	// else sends a move or a state.
+	wanted    voiceSelfPair
+	wantedSet bool
+	sent      voiceSelfPair
+	sentAt    time.Time
+	sentOpen  bool
+	lastAt    time.Time
+
+	// Told when each of the session's own messages has gone out, and whether
+	// it was a move, when a test sets it. Read under the lock, called
+	// outside it.
+	sends func(at time.Time, move bool)
+
+	// Wakes reconcile: something it sends from changed.
+	wake chan struct{}
 
 	// How the connection ended: kicked, banned or lost, or no code for one
 	// closed from here. Set before ended closes.
@@ -199,10 +249,13 @@ type voiceMumble struct {
 	ended   chan struct{}
 }
 
-// voiceMovePending is a move sent and not yet answered.
+// voiceMovePending is a move asked for and not yet answered: out is closed
+// when it goes out (sent), which waits for its turn.
 type voiceMovePending struct {
 	channel uint32
 	answer  chan error
+	out     chan struct{}
+	sent    bool
 }
 
 // voiceWriteDeadline is the connection under gumble.Conn, which gives every
@@ -243,6 +296,7 @@ func dialVoiceMumble(ctx context.Context, dial voiceMumbleDial, handler voiceMum
 		handler: handler,
 		safely:  safely,
 		name:    dial.Name,
+		wake:    make(chan struct{}, 1),
 		ended:   make(chan struct{}),
 	}
 	m.conn = gumble.NewConn(voiceWriteDeadline{Conn: raw, timeout: voiceMumbleWriteTimeout})
@@ -288,6 +342,11 @@ func dialVoiceMumble(ctx context.Context, dial voiceMumbleDial, handler voiceMum
 	}
 
 	go safely("a voice session's pings", m.ping)
+	go func() {
+		if safely("a voice session's own state", m.reconcile) {
+			m.finish(voiceEnding{Code: voiceEndMumble, Reason: voiceLostText}, true)
+		}
+	}()
 
 	return m, nil
 }
@@ -380,8 +439,21 @@ func (m *voiceMumble) read(synced chan<- error) {
 // mergeVoiceSelf is a session's state with what one UserState says about it,
 // mute and deafen coupled in the order the voice server applies them: a
 // deafen mutes, then an unmute undeafens. An undeafen alone leaves the mute,
-// as on the voice server, which says nothing of the mute then.
+// as on the voice server, which says nothing of the mute then. The admin's
+// mute and deafen and the session's own are coupled each on their own.
 func mergeVoiceSelf(self voiceMumbleSelf, state *MumbleProto.UserState) voiceMumbleSelf {
+	if state.SelfDeaf != nil {
+		self.SelfDeaf = state.GetSelfDeaf()
+		if self.SelfDeaf {
+			self.SelfMute = true
+		}
+	}
+	if state.SelfMute != nil {
+		self.SelfMute = state.GetSelfMute()
+		if !self.SelfMute {
+			self.SelfDeaf = false
+		}
+	}
 	if state.ChannelId != nil {
 		self.Channel = state.GetChannelId()
 	}
@@ -405,8 +477,8 @@ func mergeVoiceSelf(self voiceMumbleSelf, state *MumbleProto.UserState) voiceMum
 }
 
 // userState is a UserState after the session is in: its own, which may
-// answer a move, or somebody else's, which is not this connection's business
-// (the roster connection reads everybody).
+// answer a move or a state sent, or somebody else's, which is not this
+// connection's business (the roster connection reads everybody).
 func (m *voiceMumble) userState(state *MumbleProto.UserState) {
 	m.lock.Lock()
 	if state.GetSession() != m.session {
@@ -422,7 +494,16 @@ func (m *voiceMumble) userState(state *MumbleProto.UserState) {
 		m.moving.answer <- nil
 		m.moving = nil
 	}
+	if m.sentOpen && after.held() == m.wanted {
+		m.sentOpen = false
+	}
 	m.lock.Unlock()
+
+	// The voice server's word on the session's own state changed: whether
+	// it still differs from what is wanted is reconcile's to look at.
+	if after.held() != before.held() {
+		m.kick()
+	}
 
 	if after != before {
 		m.safely("a voice session's state", func() { m.handler.mumbleSelf(after) })
@@ -435,7 +516,7 @@ func (m *voiceMumble) denied(denied *MumbleProto.PermissionDenied) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.moving == nil {
+	if m.moving == nil || !m.moving.sent {
 		return
 	}
 	if denied.ChannelId != nil && denied.GetChannelId() != m.moving.channel {
@@ -543,11 +624,17 @@ func (m *voiceMumble) current() voiceMumbleSelf {
 	return m.self
 }
 
-// move takes the session to a channel and waits, at most wait, for the
-// voice server to confirm it. A session already there is not moved: the
-// voice server answers nothing to a move to the channel a session is in. No
-// answer is taken as a refusal. The move goes in a UserState of its own.
-func (m *voiceMumble) move(channel uint32, wait time.Duration) error {
+// move takes the session to a channel and waits, at most wait from when the
+// move goes out, for the voice server to confirm it. A session already there
+// is not moved: the voice server answers nothing to a move to the channel a
+// session is in. No answer is taken as a refusal, and a refused move is not
+// tried again. The move goes in a UserState of its own, sent by reconcile in
+// its turn, before any state. When ctx ends the move stops waiting, and one
+// that has not gone out yet never does; so does it when the session ends,
+// as when the plugin stops. Under Mattermost the context of a route's
+// request never ends, so a move a phone asked for waits its turn and the
+// answer.
+func (m *voiceMumble) move(ctx context.Context, channel uint32, wait time.Duration) error {
 	m.moveLock.Lock()
 	defer m.moveLock.Unlock()
 
@@ -556,9 +643,10 @@ func (m *voiceMumble) move(channel uint32, wait time.Duration) error {
 		m.lock.Unlock()
 		return nil
 	}
-	pending := &voiceMovePending{channel: channel, answer: make(chan error, 1)}
+	pending := &voiceMovePending{channel: channel, answer: make(chan error, 1), out: make(chan struct{})}
 	m.moving = pending
 	m.lock.Unlock()
+	m.kick()
 
 	forget := func() {
 		m.lock.Lock()
@@ -568,9 +656,18 @@ func (m *voiceMumble) move(channel uint32, wait time.Duration) error {
 		m.lock.Unlock()
 	}
 
-	if err := m.write(&MumbleProto.UserState{Session: proto.Uint32(m.session), ChannelId: proto.Uint32(channel)}); err != nil {
+	// Its turn: at most voiceStateGap after the session's last message. An
+	// admin who moves the session there meanwhile answers it.
+	select {
+	case <-pending.out:
+	case err := <-pending.answer:
+		return err
+	case <-m.ended:
 		forget()
 		return voiceLostRefusal()
+	case <-ctx.Done():
+		forget()
+		return ctx.Err()
 	}
 
 	timer := time.NewTimer(wait)
@@ -582,6 +679,9 @@ func (m *voiceMumble) move(channel uint32, wait time.Duration) error {
 	case <-m.ended:
 		forget()
 		return voiceLostRefusal()
+	case <-ctx.Done():
+		forget()
+		return ctx.Err()
 	case <-timer.C:
 		forget()
 
@@ -596,16 +696,157 @@ func (m *voiceMumble) move(channel uint32, wait time.Duration) error {
 	}
 }
 
-// setSelf sets the session's own mute and deafen on the voice server.
-// Deafened is muted too, as in Mumble.
-func (m *voiceMumble) setSelf(muted, deafened bool) error {
-	muted = muted || deafened
+// setSelf asks for the session's own mute and deafen on the voice server,
+// deafened being muted too, as in Mumble. It does not wait: reconcile sends
+// it while the voice server's word differs from it, and again until that
+// word follows. A person who asks again (again) for what is already wanted
+// while the voice server's word still differs has it sent again as soon as
+// the session's pace allows, without the wait for that word. It fails only
+// on a connection that has ended.
+func (m *voiceMumble) setSelf(muted, deafened, again bool) error {
+	select {
+	case <-m.ended:
+		return errVoiceMumbleClosed
+	default:
+	}
+
+	wanted := voiceSelfPair{mute: muted || deafened, deaf: deafened}
 
 	m.lock.Lock()
-	m.selfMute, m.selfDeaf = muted, deafened
+	if again && m.wantedSet && m.wanted == wanted && wanted != m.self.held() {
+		m.sentOpen = false
+	}
+	m.wanted, m.wantedSet = wanted, true
+	m.lock.Unlock()
+	m.kick()
+
+	return nil
+}
+
+// kick wakes reconcile.
+func (m *voiceMumble) kick() {
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
+}
+
+// reconcile is the one sender of the session's own messages, moves and its
+// self mute and deafen, until the connection ends: whatever nextLocked says
+// is due, when it says.
+func (m *voiceMumble) reconcile() {
+	var timer *time.Timer
+	var due <-chan time.Time
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	for {
+		select {
+		case <-m.ended:
+			return
+		case <-m.wake:
+		case <-due:
+		}
+
+		for {
+			message, wait := m.next(time.Now())
+			if message == nil {
+				if timer != nil {
+					timer.Stop()
+					timer, due = nil, nil
+				}
+				if wait > 0 {
+					timer = time.NewTimer(wait)
+					due = timer.C
+				}
+
+				break
+			}
+
+			// One that cannot go out has ended the connection.
+			if m.write(message) != nil {
+				return
+			}
+			m.wrote(message)
+		}
+	}
+}
+
+// wrote notes that one of the session's own messages has gone out: the next
+// one waits voiceStateGap from here, and the voice server's word on a state
+// is waited for from here, so that the pace holds between the times the
+// messages actually went out, however long a write took.
+func (m *voiceMumble) wrote(message proto.Message) {
+	move := false
+	if state, ok := message.(*MumbleProto.UserState); ok {
+		move = state.ChannelId != nil
+	}
+	now := time.Now()
+
+	m.lock.Lock()
+	m.lastAt = now
+	if !move {
+		m.sentAt = now
+	}
+	sends := m.sends
 	m.lock.Unlock()
 
-	return m.write(&MumbleProto.UserState{Session: proto.Uint32(m.session), SelfMute: proto.Bool(muted), SelfDeaf: proto.Bool(deafened)})
+	if sends != nil {
+		sends(now, move)
+	}
+}
+
+// next is nextLocked under the lock.
+func (m *voiceMumble) next(now time.Time) (proto.Message, time.Duration) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	return m.nextLocked(now)
+}
+
+// nextLocked is the message the session sends now, noted as sent, or nil
+// and how long until one may be due (0: nothing is). A move asked for goes
+// first. The state goes only while the voice server's word differs from
+// what is wanted, so that nothing is ever sent that would change nothing:
+// the newest wanted at once, and the same one again only once the voice
+// server's word has not followed it for voiceStateResend. Neither goes
+// sooner than voiceStateGap after the session's last message.
+func (m *voiceMumble) nextLocked(now time.Time) (proto.Message, time.Duration) {
+	move := m.moving != nil && !m.moving.sent
+
+	at := now
+	switch {
+	case move:
+	case m.wantedSet && m.wanted != m.self.held():
+		if m.sentOpen && m.sent == m.wanted {
+			at = m.sentAt.Add(voiceStateResend)
+		}
+	default:
+		return nil, 0
+	}
+	if !m.lastAt.IsZero() {
+		if next := m.lastAt.Add(voiceStateGap); next.After(at) {
+			at = next
+		}
+	}
+	if at.After(now) {
+		return nil, at.Sub(now)
+	}
+
+	m.lastAt = now
+	if move {
+		m.moving.sent = true
+		close(m.moving.out)
+
+		return &MumbleProto.UserState{Session: proto.Uint32(m.session), ChannelId: proto.Uint32(m.moving.channel)}, 0
+	}
+
+	m.sent, m.sentAt, m.sentOpen = m.wanted, now, true
+
+	return &MumbleProto.UserState{Session: proto.Uint32(m.session), SelfMute: proto.Bool(m.wanted.mute), SelfDeaf: proto.Bool(m.wanted.deaf)}, 0
 }
 
 // endedWith is how the connection ended: kicked, banned or lost, with the

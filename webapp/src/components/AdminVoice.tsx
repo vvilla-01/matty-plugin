@@ -12,7 +12,8 @@ import type {AdminCardProps} from './adminParts';
 // VoiceTalkStatus setting (GET /api/v1/admin/voice): whether the voice port
 // is open and the addresses phones are given, or why not; whether the voice
 // server is connected; how many people talk from Matty through this server
-// now; and the voice server's last refusal of one of them. Never who.
+// now; the voice server's last refusal of one of them; and the lines of
+// Channels to show that name no channel or more than one. Never who.
 //
 // Read-only: nothing here is saved, so it never calls onChange. The words
 // are voiceAdmin.ts's, which build/check-voice.mjs holds.

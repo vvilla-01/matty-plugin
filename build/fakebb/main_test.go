@@ -12,7 +12,7 @@ import (
 // server, each at its own addresses.
 func TestTheOnePortServesEveryStandIn(t *testing.T) {
 	b := &box{streams: map[string]*stream{}, sessions: map[string]*session{}, inH264: map[string]bool{}}
-	server := httptest.NewServer(b.routes([]string{"alice"}))
+	server := httptest.NewServer(b.routes([]string{"alice"}, ""))
 	defer server.Close()
 
 	for _, address := range []string{"/api/status", "/fake/steam", "/fake/push"} {

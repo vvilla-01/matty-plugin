@@ -139,12 +139,12 @@ out="$(dirname -- "$bundle")/.$(basename -- "$bundle").signing"
 if [[ -e "$out" ]]; then die "refusing: $out already exists"; fi
 trap 'rm -rf -- "$tmp"; rm -f -- "$out"' EXIT
 tar -C "$tmp/unpacked" -czf "$out" "$top"
-"$tmp/checkrelease" -rsa-cert "$tmp/rsa.der" -mldsa-cert "$tmp/mldsa87.der" -version "$version" "$out" >"$tmp/check.txt" \
+"$tmp/checkrelease" -rsa-cert "$tmp/rsa.der" -mldsa-cert "$tmp/mldsa87.der" -version "$version" -exact "$out" >"$tmp/check.txt" \
     || { cat "$tmp/check.txt" >&2; die "the signed bundle did not pass the checker; $bundle is unchanged"; }
 
 # Whether a plugin built from this tree, with the certificates built into it, will call it signed:
 # if not, the bundle is left as it was, unless --unpinned asked for it anyway.
-if "$tmp/checkrelease" -version "$version" "$out" >"$tmp/pinned.txt"; then
+if "$tmp/checkrelease" -version "$version" -exact "$out" >"$tmp/pinned.txt"; then
     pinned="yes: these are the certificates built into the plugin"
 elif [[ $unpinned == yes ]]; then
     pinned="NO: these are not the certificates built into the plugin, which will report this release as altered"

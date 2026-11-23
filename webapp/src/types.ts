@@ -138,8 +138,10 @@ export type VoicePerson = {
     phone?: boolean;
 };
 
-// One channel of the voice server's tree, from 4.3.0. The root is id 0 and
-// has no parent; max only where the channel has a limit of its own.
+// One channel of the voice server's tree, from 4.3.0. parent is missing for
+// the root, id 0, and, from 4.4.0, for a shown channel whose parent is not
+// shown under Channels to show (the root then not being in the tree); max
+// only where the channel has a limit of its own.
 export type VoiceChannel = {
     id: number;
     name: string;
@@ -536,14 +538,16 @@ export type ReleaseAnswer = ReleaseWord & {
 // app: check is the server's setting ('off', 'report' or 'require'); state
 // is 'verified', 'unverified' (reason says why, in the server's words) or
 // 'none'; development beside verified when only the plugin's development
-// build would pass it; versionCode as Android attested it
-// (server/app_check.go appWord).
+// build would pass it; versionCode as Android attested it; minimum, the
+// oldest Matty this server answers, while one is set, which never refuses
+// the panel (server/app_check.go appWord, server/app_version.go).
 export type AppWord = {
     check: 'off' | 'report' | 'require' | string;
     state: 'verified' | 'unverified' | 'none' | string;
     reason?: string;
     development?: boolean;
     versionCode?: number;
+    minimum?: string;
 };
 
 // For system admins: the plugin's files are not as signed, or a signed
@@ -675,6 +679,10 @@ export type Me = {
     // System admins only, from 4.3.0: talking from Matty is switched on
     // here and its voice port is down, in the server's words.
     voiceTalkAlert?: string;
+
+    // System admins only, from 4.4.0: a newer release of the plugin is
+    // out, while Look for updates is on, and its page.
+    updateAlert?: {version: string; url: string};
 };
 
 // The two services connected the 3.4.0 way, through one core on the server

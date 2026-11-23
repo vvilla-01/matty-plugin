@@ -1,4 +1,5 @@
 import {PLUGIN_BASE} from './manifest';
+import {bundleProblem} from './updateAdmin';
 import type {
     AccountService,
     AppWord,
@@ -175,8 +176,10 @@ export const fetchRelease = (): Promise<ReleaseAnswer> => requestJSON<ReleaseAns
 
 // GET /api/v1/admin/appcheck, for system admins: every person whose Matty
 // has a verdict that has not expired, and each of their sign-ins' verdicts
-// (server/app_check.go appCheckAdminView). check is the setting; problem says
-// which lines of the two lists of digests were left out. Of each verdict:
+// (server/app_check.go appCheckAdminView). check is the setting; minimum is
+// the oldest Matty this server answers, while one is set; problem says which
+// lines of the two lists of digests were left out, and that Minimum Matty
+// version counts as none when it is not a version. Of each verdict:
 // verified, and development beside it when only the plugin's development
 // build would pass it; reason, the server's words, when it is not verified;
 // at and expires (ms); versionCode, the app's version code as Android
@@ -202,6 +205,7 @@ export type AdminAppCheckPerson = {
 
 export type AdminAppCheck = {
     check: AppWord['check'];
+    minimum?: string;
     problem?: string;
     people: AdminAppCheckPerson[];
 };
@@ -253,7 +257,13 @@ export const fetchAdminPush = (): Promise<AdminPush> => requestJSON<AdminPush>('
 // does not; talking, how many people talk from Matty through it now;
 // noBudget, whether the plugin's own limit of connections to the voice
 // server is lifted; refused and refusedAt (ms), the voice server's last
-// refusal of somebody joining from Matty. Never who.
+// refusal of somebody joining from Matty; unmatched, the lines of Channels
+// to show that name no channel, and several, the ones that name more than
+// one with the paths of the first five channels each names and how many
+// more, while the voice server is connected; tooLong, the lines longer than
+// 256 characters, which are not used, each as its first 40 characters and
+// "…", and dropped, how many lines come after the first 200, which are not
+// used either. Never who.
 export type AdminVoice = {
     on: boolean;
     connected: boolean;
@@ -265,9 +275,117 @@ export type AdminVoice = {
     noBudget: boolean;
     refused?: string;
     refusedAt?: number;
+    unmatched?: string[];
+    several?: {line: string; paths: string[]; more?: number}[];
+    tooLong?: string[];
+    dropped?: number;
 };
 
 export const fetchAdminVoice = (): Promise<AdminVoice> => requestJSON<AdminVoice>('/api/v1/admin/voice');
+
+// GET /api/v1/admin/update, for system admins (server/update.go
+// updateAdminView): enabled, the Look for updates setting; running, the
+// version this server runs; platform, this server's (such as linux-amd64),
+// always there; latest, the newest release the last look found,
+// newer, whether it is newer, and url, its page; lookedAt (ms), when it last
+// looked; trouble and troubleAt, the last thing that went wrong, in the
+// server's words; and, while a newer one is known, install, whether a
+// bundle of it can be had from here (ready) or what keeps it from that
+// (missing: unsigned, asset, uploads), and inVoice, how many phones are in
+// voice through the plugin, which an install drops. POST .../update/check
+// looks now and answers the same; it is refused 409 while the setting is off
+// and 429 within a minute of the last time.
+export type AdminUpdate = {
+    enabled: boolean;
+    running: string;
+    platform: string;
+    latest?: string;
+    newer: boolean;
+    url?: string;
+    lookedAt?: number;
+    trouble?: string;
+    troubleAt?: number;
+    install?: {ready: boolean; missing?: string[]};
+    inVoice?: number;
+};
+
+export const fetchAdminUpdate = (): Promise<AdminUpdate> => requestJSON<AdminUpdate>('/api/v1/admin/update');
+
+export const checkAdminUpdate = (): Promise<AdminUpdate> => requestJSON<AdminUpdate>('/api/v1/admin/update/check', {method: 'POST'});
+
+// A bundle of the plugin to hand to Mattermost: the file, the name it goes
+// under, and its version.
+export type UpdateBundle = {file: Blob; name: string; version: string};
+
+const UPDATE_BUNDLE_NAME = /^ceo\.villa\.matty-\d+\.\d+\.\d+-[a-z0-9]+-[a-z0-9]+\.tar\.gz$/;
+
+// POST /api/v1/admin/update/bundle, for system admins: the newer version
+// the last look found, downloaded, checked and packed again by the server
+// (server/update.go handleAdminUpdateBundle). Refused 409 while the setting
+// is off, when no newer version is known or it cannot be installed from
+// here, 429 within a minute of the last one or while one is being
+// prepared, 502 when the download or the check failed, and 503 when the
+// plugin stopped in the middle, each with the server's sentence. asked is
+// the version the admin was asked about: an answer that is not 200 with a
+// body and a version, or that is another version, is refused here, before
+// anything is uploaded (updateAdmin.ts bundleProblem).
+export async function fetchUpdateBundle(asked: string): Promise<UpdateBundle> {
+    const response = await fetch(PLUGIN_BASE + '/api/v1/admin/update/bundle', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: baseHeaders(),
+    });
+
+    if (!response.ok) {
+        const {text, code} = await readRefusal(response);
+        heardRefusal(code);
+        throw new RequestError(text || `The bundle could not be had (${response.status}).`, response.status, code, text);
+    }
+
+    const version = response.headers.get('X-Matty-Update-Version') || '';
+    const file = await response.blob();
+    const problem = bundleProblem(response.status, file.size, version, asked);
+    if (problem) {
+        throw new Error(problem);
+    }
+    const named = (/filename="([^"]+)"/).exec(response.headers.get('Content-Disposition') || '');
+    const name = named && UPDATE_BUNDLE_NAME.test(named[1]) ? named[1] : `ceo.villa.matty-${version}.tar.gz`;
+
+    return {file, name, version};
+}
+
+// POST /api/v4/plugins: Mattermost's own upload of a plugin, as System
+// Console > Plugins > Plugin Management makes it, with this admin's own
+// session and the headers every other POST here sends (X-Requested-With and
+// the CSRF token). plugin is the bundle under its name; force, "true",
+// replaces the version installed. The browser writes the multipart
+// Content-Type itself. A refusal is Mattermost's own sentence (its JSON
+// error's message).
+export async function uploadPluginBundle(bundle: UpdateBundle): Promise<void> {
+    const form = new FormData();
+    form.append('plugin', bundle.file, bundle.name);
+    form.append('force', 'true');
+
+    const response = await fetch('/api/v4/plugins', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: baseHeaders(),
+        body: form,
+    });
+
+    if (!response.ok) {
+        let message = '';
+        try {
+            const body = await response.json();
+            if (body && typeof body.message === 'string') {
+                message = body.message;
+            }
+        } catch {
+            // Not a JSON error body.
+        }
+        throw new Error(message || `Mattermost did not take the bundle (${response.status}).`);
+    }
+}
 
 // A read the server can answer with "you already have it" (contract duty 6).
 // tag is the tag the copy in hand came under: this route's ETag, or, for the

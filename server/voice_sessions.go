@@ -229,6 +229,12 @@ type (
 		Channel    uint32 `json:"channel"`
 		Muted      bool   `json:"muted"`
 		Suppressed bool   `json:"suppressed"`
+
+		// The reader's own mute and deafen as the voice server holds them,
+		// which may lag what was asked for, and differs from it while the
+		// voice server has not taken it yet.
+		SelfMuted    bool `json:"selfMuted"`
+		SelfDeafened bool `json:"selfDeafened"`
 	}
 
 	voiceEndSignal struct {
@@ -297,6 +303,11 @@ type voiceSession struct {
 	// The name it has on the voice server.
 	name string
 
+	// Whether its last join said it came from Matty, and the version it
+	// said, for a change of the minimum (endOutdated).
+	matty   bool
+	version string
+
 	up   *voiceUplink
 	down *voiceDownlink
 
@@ -309,9 +320,16 @@ type voiceSession struct {
 	muted    bool
 	deafened bool
 
-	// As the voice server says.
-	serverMuted bool
-	suppressed  bool
+	// As the voice server says: muted or deafened by an admin, not allowed
+	// to speak, and the session's own mute and deafen as it holds them
+	// (held), which lags what was asked for until its word follows.
+	serverMuted  bool
+	suppressed   bool
+	heldMuted    bool
+	heldDeafened bool
+
+	// Counts the decisions on whether voice may go up (blockLocked).
+	blockedAt uint64
 
 	// The wait for a phone that has gone, and its generation.
 	wait   voiceTimer
@@ -408,7 +426,7 @@ func (s *voiceSession) peerGone(peer voicePeer) {
 
 // selfLocked is the session's state as the data channel's "self" says it.
 func (s *voiceSession) selfLocked() voiceSelfState {
-	state := voiceSelfState{Muted: s.serverMuted, Suppressed: s.suppressed}
+	state := voiceSelfState{Muted: s.serverMuted, Suppressed: s.suppressed, SelfMuted: s.heldMuted, SelfDeafened: s.heldDeafened}
 	if s.mumble != nil {
 		state.Channel = s.mumble.current().Channel
 	}
@@ -416,9 +434,24 @@ func (s *voiceSession) selfLocked() voiceSelfState {
 	return state
 }
 
-// blockedLocked is whether nothing may go up.
+// blockedLocked is whether nothing may go up: no phone, muted or deafened
+// as the person asked, which stops it at once, or anything the voice server
+// says stops it, their own mute or deafen as it holds them included. Voice
+// that went up while the voice server holds the session muted would be
+// passed on to nobody, and the phone would show its own talking all the same.
 func (s *voiceSession) blockedLocked() bool {
-	return s.peer == nil || s.muted || s.deafened || s.serverMuted || s.suppressed
+	return s.peer == nil || s.muted || s.deafened || s.serverMuted || s.suppressed || s.heldMuted || s.heldDeafened
+}
+
+// blockLocked is the decision on whether voice may go up, from the inputs as
+// they stand under the lock, numbered: the uplink takes a decision only when
+// it is newer than the last it took, so that two made at once on different
+// goroutines (the voice server's word and a tap, say) end on the newer
+// inputs whichever lands last.
+func (s *voiceSession) blockLocked() voiceBlock {
+	s.blockedAt++
+
+	return voiceBlock{blocked: s.blockedLocked(), at: s.blockedAt}
 }
 
 // talkingChanged sends the phone who is talking, when it changed: the
@@ -464,13 +497,14 @@ func (s *voiceSession) mumbleAudio(sender uint32, sequence int64, payload []byte
 func (s *voiceSession) mumbleSelf(self voiceMumbleSelf) {
 	s.lock.Lock()
 	s.serverMuted, s.suppressed = self.muted(), self.Suppressed
-	blocked := s.blockedLocked()
+	s.heldMuted, s.heldDeafened = self.SelfMute, self.SelfDeaf
+	block := s.blockLocked()
 	peer := s.peer
 	state := s.selfLocked()
 	state.Channel = self.Channel
 	s.lock.Unlock()
 
-	s.up.setBlocked(blocked)
+	s.up.setBlockedAs(block)
 	if peer != nil {
 		peer.signal(voiceSelfSignal{Self: state})
 	}
@@ -525,6 +559,11 @@ type voiceJoinAsk struct {
 	Channel  uint32
 	Muted    bool
 	Deafened bool
+
+	// Whether the join said it came from Matty, and the version it said
+	// ("" when none can be read), from its User-Agent (mattyOf).
+	Matty   bool
+	Version string
 }
 
 // voiceJoined is a join's answer, without the SDP the route adds.
@@ -561,6 +600,10 @@ type voiceSessions struct {
 	// stands. For the sweep.
 	accessGone  func(userID string) (gone, answered bool)
 	readSession func(userID, sessionID string) voiceSessionRead
+
+	// The oldest Matty this server answers, as in force when it is called
+	// ("" for none): a join checks it once its session is its own.
+	minimum func() string
 
 	// How a phone session connects: dialVoiceMumble, or a test's.
 	dial func(ctx context.Context, dial voiceMumbleDial, handler voiceMumbleHandler, safely func(string, func()) bool) (*voiceMumble, error)
@@ -610,6 +653,7 @@ func newVoiceSessions(clock voiceClock, safely func(string, func()) bool) *voice
 		putPhone:     func(uint32, string) func() { return func() {} },
 		accessGone:   func(string) (bool, bool) { return false, true },
 		readSession:  func(string, string) voiceSessionRead { return voiceSessionStands },
+		minimum:      func() string { return "" },
 		dial:         dialVoiceMumble,
 		wait:         voiceTalkWait,
 		most:         voiceTalkMost,
@@ -747,13 +791,16 @@ func (r *voiceSessions) forgetNames() {
 	r.fallbackFirst = false
 }
 
-// checkChannel refuses a channel the roster connection does not know.
-func (r *voiceSessions) checkChannel(channel uint32) error {
+// checkChannel refuses a channel the roster connection does not know, which
+// is also one Channels to show leaves out, unless the session already sits
+// in it (here): a Mumble admin may have moved it there, and joining again
+// where it is moves nothing.
+func (r *voiceSessions) checkChannel(channel uint32, here bool) error {
 	known, connected := r.channelKnown(channel)
 	switch {
 	case !connected:
 		return voiceUnavailableRefusal(voiceNotConnectedText, 0)
-	case !known:
+	case !known && !here:
 		return &voiceRefusal{Status: http.StatusNotFound, Code: codeNotFound, Sentence: voiceNoChannelText}
 	default:
 		return nil
@@ -762,19 +809,22 @@ func (r *voiceSessions) checkChannel(channel uint32) error {
 
 // join runs a join: the person's session as it is, taken over, or a new
 // connection to the voice server within the budget; the move; mute and
-// deafen as asked; then attach, which makes the phone's peer for the
-// session. A join that fails leaves nothing it made behind: a session it
-// took over stays as it was. On success the session's previous peer, if it
-// had one, is told it was replaced and closed.
+// deafen as asked, which gate the voice at once; then attach, which makes
+// the phone's peer for the session, and only then is the voice server asked
+// for the mute and deafen. A join that fails leaves nothing it made behind:
+// a session it took over keeps the mute and deafen it had, and the voice
+// server is asked for nothing new. On success the session's previous peer,
+// if it had one, is told it was replaced and closed. A Matty below the
+// minimum in force by then has its session ended and is refused.
 func (r *voiceSessions) join(ctx context.Context, ask voiceJoinAsk, dial voiceTalkDial, attach func(s *voiceSession) (voicePeer, error)) (voiceJoined, error) {
 	unlock := r.lockUser(ask.UserID)
 	defer unlock()
 
-	if err := r.checkChannel(ask.Channel); err != nil {
+	s := r.of(ask.UserID)
+	if err := r.checkChannel(ask.Channel, s != nil && s.channel() == ask.Channel); err != nil {
 		return voiceJoined{}, err
 	}
 
-	s := r.of(ask.UserID)
 	made := false
 	if s == nil {
 		var err error
@@ -783,6 +833,7 @@ func (r *voiceSessions) join(ctx context.Context, ask voiceJoinAsk, dial voiceTa
 		}
 		made = true
 	}
+	before := s.wanted()
 
 	fail := func(err error) (voiceJoined, error) {
 		// A kick or a ban that landed meanwhile is the voice server's word
@@ -793,15 +844,18 @@ func (r *voiceSessions) join(ctx context.Context, ask voiceJoinAsk, dial voiceTa
 		}
 		if made {
 			r.finish(s, voiceEnding{}, nil)
+		} else {
+			_, _ = r.holdState(s, before.mute, before.deaf)
 		}
 
 		return voiceJoined{}, voiceRefusalOf(err)
 	}
 
-	if err := r.moveSession(s, ask.Channel); err != nil {
+	if err := r.moveSession(ctx, s, ask.Channel); err != nil {
 		return fail(err)
 	}
-	if err := r.setState(s, ask.Muted, ask.Deafened); err != nil {
+	m, err := r.holdState(s, ask.Muted, ask.Deafened)
+	if err != nil {
 		return fail(err)
 	}
 
@@ -816,6 +870,23 @@ func (r *voiceSessions) join(ctx context.Context, ask voiceJoinAsk, dial voiceTa
 	if !r.attach(s, peer) {
 		r.closePeer(peer, voiceEnding{})
 		return fail(voiceLostRefusal())
+	}
+	if m.setSelf(ask.Muted, ask.Deafened, false) != nil {
+		return fail(voiceLostRefusal())
+	}
+
+	// The session is this join's now, and is what it said it is.
+	s.lock.Lock()
+	s.matty, s.version = ask.Matty, ask.Version
+	s.lock.Unlock()
+
+	// A minimum that came into force while this join made its connection
+	// found no session of this person to end: the join ends it here, as
+	// endOutdated would, and is refused as the minimum's gate refuses.
+	if sentence := appOutdatedText(r.minimum(), ask.Version); ask.Matty && sentence != "" {
+		r.finish(s, voiceEnding{Code: voiceEndOff, Reason: sentence}, nil)
+
+		return voiceJoined{}, &voiceRefusal{Status: http.StatusForbidden, Code: codeAppOutdated, Sentence: sentence}
 	}
 
 	// A phone whose connection went while it was answered (its port closed
@@ -937,7 +1008,7 @@ func (r *voiceSessions) nameRefusal(name string, dial voiceTalkDial, userID stri
 // newSession is a session not yet connected, ready to be its connection's
 // handler.
 func (r *voiceSessions) newSession(ask voiceJoinAsk, name string) *voiceSession {
-	s := &voiceSession{owner: r, userID: ask.UserID, username: ask.Username, sessionID: ask.SessionID, name: name}
+	s := &voiceSession{owner: r, userID: ask.UserID, username: ask.Username, sessionID: ask.SessionID, name: name, matty: ask.Matty, version: ask.Version}
 
 	s.up = &voiceUplink{
 		clock:  r.clock,
@@ -971,6 +1042,7 @@ func (r *voiceSessions) insert(s *voiceSession, m *voiceMumble, era uint64) bool
 	s.mumble = m
 	self := m.current()
 	s.serverMuted, s.suppressed = self.muted(), self.Suppressed
+	s.heldMuted, s.heldDeafened = self.SelfMute, self.SelfDeaf
 	s.lock.Unlock()
 
 	r.lock.Lock()
@@ -996,9 +1068,10 @@ func (r *voiceSessions) insert(s *voiceSession, m *voiceMumble, era uint64) bool
 	return true
 }
 
-// moveSession moves a session to a channel the roster connection knows.
-func (r *voiceSessions) moveSession(s *voiceSession, channel uint32) error {
-	if err := r.checkChannel(channel); err != nil {
+// moveSession moves a session to a channel the roster connection knows, or
+// leaves it where it is. The move stops waiting when ctx ends.
+func (r *voiceSessions) moveSession(ctx context.Context, s *voiceSession, channel uint32) error {
+	if err := r.checkChannel(channel, s.channel() == channel); err != nil {
 		return err
 	}
 
@@ -1010,7 +1083,7 @@ func (r *voiceSessions) moveSession(s *voiceSession, channel uint32) error {
 		return voiceLostRefusal()
 	}
 
-	err := m.move(channel, r.moveWait)
+	err := m.move(ctx, channel, r.moveWait)
 
 	var refused *voiceRefusal
 	if errors.As(err, &refused) && refused.Code == codeVoiceDenied {
@@ -1020,48 +1093,65 @@ func (r *voiceSessions) moveSession(s *voiceSession, channel uint32) error {
 	return err
 }
 
-// setState sets a session's mute and deafen, deafened being muted too, and
-// stops what they stop. When the new state stops the voice going up, the
-// spell of talking is ended (its last frame sent) before the voice server is
-// told the person muted: it passes nothing on from somebody self muted, the
-// last frame included. Letting the voice up again comes after it is told.
-func (r *voiceSessions) setState(s *voiceSession, muted, deafened bool) error {
-	muted = muted || deafened
-
-	s.lock.Lock()
-	m, ended := s.mumble, s.ended
-	if m != nil && !ended {
-		s.muted, s.deafened = muted, deafened
+// setState sets a session's mute and deafen (holdState), then asks the voice
+// server for them. When the new state stops the voice going up, the spell of
+// talking is ended (its last frame sent) before the voice server is asked to
+// self mute the session: it passes nothing on from somebody self muted, the
+// last frame included. Letting the voice up again waits for the voice
+// server's word that the session is no longer self muted (mumbleSelf). The
+// session's connection sends what is asked when it differs from that word,
+// in its turn (voiceMumble.reconcile), and nothing here waits for it. A
+// person asking again for what they already asked (again) has it sent again
+// as soon as the session's pace allows.
+func (r *voiceSessions) setState(s *voiceSession, muted, deafened, again bool) error {
+	m, err := r.holdState(s, muted, deafened)
+	if err != nil {
+		return err
 	}
-	blocked := s.blockedLocked()
-	s.lock.Unlock()
-
-	if m == nil || ended {
+	if m.setSelf(muted, deafened, again) != nil {
 		return voiceLostRefusal()
 	}
-	if blocked {
-		s.up.setBlocked(true)
-	}
-	if err := m.setSelf(muted, deafened); err != nil {
-		return voiceLostRefusal()
-	}
-
-	s.lock.Lock()
-	blocked = s.blockedLocked()
-	s.lock.Unlock()
-
-	s.up.setBlocked(blocked)
-	s.down.setDeaf(deafened)
-	s.talkingChanged()
 
 	return nil
 }
 
+// holdState sets a session's mute and deafen as the person asked, deafened
+// being muted too, and stops at once what they stop, without asking the
+// voice server for anything. It answers the session's connection.
+func (r *voiceSessions) holdState(s *voiceSession, muted, deafened bool) (*voiceMumble, error) {
+	muted = muted || deafened
+
+	s.lock.Lock()
+	m, ended := s.mumble, s.ended
+	if m == nil || ended {
+		s.lock.Unlock()
+		return nil, voiceLostRefusal()
+	}
+	s.muted, s.deafened = muted, deafened
+	block := s.blockLocked()
+	s.lock.Unlock()
+
+	s.up.setBlockedAs(block)
+	s.down.setDeaf(deafened)
+	s.talkingChanged()
+
+	return m, nil
+}
+
+// wanted is the session's mute and deafen as the person asked.
+func (s *voiceSession) wanted() voiceSelfPair {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return voiceSelfPair{mute: s.muted, deaf: s.deafened}
+}
+
 // attach gives a session its new peer, in place of any it had (which is told
 // it was replaced, and closed), and ends any wait. A session that had been
-// waiting was self deafened on the voice server for it, so the mute and
-// deafen asked for go to the voice server again. False when the session has
-// ended.
+// waiting was self deafened on the voice server for it; the join has already
+// asked for the mute and deafen it wants, and the session's connection sends
+// them once, when the voice server's word differs. False when the session
+// has ended.
 func (r *voiceSessions) attach(s *voiceSession, peer voicePeer) bool {
 	s.lock.Lock()
 	if s.ended {
@@ -1072,25 +1162,19 @@ func (r *voiceSessions) attach(s *voiceSession, peer voicePeer) bool {
 	old := s.peer
 	s.peer = peer
 	s.waitAt++
-	waiting := s.wait != nil
-	if waiting {
+	if s.wait != nil {
 		s.wait.Stop()
 		s.wait = nil
 	}
-	blocked := s.blockedLocked()
-	m, muted, deafened := s.mumble, s.muted, s.deafened
+	block := s.blockLocked()
 	s.lock.Unlock()
-
-	if waiting && m != nil {
-		_ = m.setSelf(muted, deafened)
-	}
 
 	s.talkLock.Lock()
 	s.talkSent, s.talkLastSet = false, nil
 	s.talkLock.Unlock()
 
 	s.up.restart()
-	s.up.setBlocked(blocked)
+	s.up.setBlockedAs(block)
 	s.down.attach(peer)
 
 	if old != nil && old != peer {
@@ -1101,10 +1185,11 @@ func (r *voiceSessions) attach(s *voiceSession, peer voicePeer) bool {
 }
 
 // peerGone starts a session's wait for its phone: nothing goes up or down,
-// the session is self deafened on the voice server, and it ends unless a
-// join takes it over within the wait. It takes the person's turn, so that it
-// never runs in the middle of a join: one that takes the session over first
-// leaves this nothing to do, as the session's peer is no longer this one.
+// the session asks to be self deafened on the voice server (sent by its
+// connection as every state is), and it ends unless a join takes it over
+// within the wait. It takes the person's turn, so that it never runs in the
+// middle of a join: one that takes the session over first leaves this
+// nothing to do, as the session's peer is no longer this one.
 func (r *voiceSessions) peerGone(s *voiceSession, peer voicePeer) {
 	unlock := r.lockUser(s.userID)
 	defer unlock()
@@ -1132,14 +1217,15 @@ func (r *voiceSessions) peerGoneLocked(s *voiceSession, peer voicePeer) {
 		})
 	})
 	m, muted := s.mumble, s.muted
+	block := s.blockLocked()
 	s.lock.Unlock()
 
-	s.up.setBlocked(true)
+	s.up.setBlockedAs(block)
 	s.down.attach(nil)
 	s.talkingChanged()
 
 	if m != nil {
-		_ = m.setSelf(muted, true)
+		_ = m.setSelf(muted, true, false)
 	}
 
 	r.closePeer(peer, voiceEnding{})
@@ -1163,6 +1249,7 @@ func (r *voiceSessions) finish(s *voiceSession, ending voiceEnding, guard func(s
 		s.wait.Stop()
 		s.wait = nil
 	}
+	block := s.blockLocked()
 	s.lock.Unlock()
 
 	r.lock.Lock()
@@ -1171,7 +1258,7 @@ func (r *voiceSessions) finish(s *voiceSession, ending voiceEnding, guard func(s
 	}
 	r.lock.Unlock()
 
-	s.up.setBlocked(true)
+	s.up.setBlockedAs(block)
 	s.down.attach(nil)
 
 	if m != nil {
@@ -1198,8 +1285,13 @@ func (r *voiceSessions) closePeer(peer voicePeer, ending voiceEnding) {
 	})
 }
 
-// move moves the person's session to a channel.
-func (r *voiceSessions) move(userID string, channel uint32) (uint32, error) {
+// move moves the person's session to a channel, holding the person's turn
+// until the voice server answers, the move's wait runs out (its turn and
+// moveWait, about four seconds at most) or the move gives up: a move whose
+// context ends gives up its turn, and so does one whose session ends, as
+// when the plugin stops. Under Mattermost a request's context never ends, so
+// the person's next request, a leave among them, waits behind a move.
+func (r *voiceSessions) move(ctx context.Context, userID string, channel uint32) (uint32, error) {
 	unlock := r.lockUser(userID)
 	defer unlock()
 
@@ -1208,7 +1300,7 @@ func (r *voiceSessions) move(userID string, channel uint32) (uint32, error) {
 		return 0, &voiceRefusal{Status: http.StatusConflict, Code: codeConflict, Sentence: voiceNotInVoiceText}
 	}
 
-	if err := r.moveSession(s, channel); err != nil {
+	if err := r.moveSession(ctx, s, channel); err != nil {
 		return 0, voiceRefusalOf(err)
 	}
 
@@ -1225,7 +1317,7 @@ func (r *voiceSessions) state(userID string, muted, deafened bool) (bool, bool, 
 		return false, false, &voiceRefusal{Status: http.StatusConflict, Code: codeConflict, Sentence: voiceNotInVoiceText}
 	}
 
-	if err := r.setState(s, muted, deafened); err != nil {
+	if err := r.setState(s, muted, deafened, true); err != nil {
 		return false, false, voiceRefusalOf(err)
 	}
 
@@ -1247,6 +1339,30 @@ func (r *voiceSessions) leave(userID string) {
 func (r *voiceSessions) endFor(userID string, ending voiceEnding) {
 	if s := r.of(userID); s != nil {
 		r.finish(s, ending, nil)
+	}
+}
+
+// endOutdated ends the session of every Matty that does not meet minimum,
+// as its last join said it (an older version, or none that can be read),
+// telling its phone the sentence a request of that Matty is refused with.
+// A session joined from a client that does not say it is Matty stays, and
+// no minimum ends nobody. One person at a time, so that a join taking a
+// session over has said what it is first.
+func (r *voiceSessions) endOutdated(minimum string) {
+	if minimum == "" {
+		return
+	}
+
+	for _, s := range r.all() {
+		unlock := r.lockUser(s.userID)
+		s.lock.Lock()
+		matty, version := s.matty, s.version
+		s.lock.Unlock()
+
+		if sentence := appOutdatedText(minimum, version); matty && sentence != "" {
+			r.finish(s, voiceEnding{Code: voiceEndOff, Reason: sentence}, nil)
+		}
+		unlock()
 	}
 }
 
@@ -1338,6 +1454,7 @@ func (p *Plugin) voiceTalk() *voiceSessions {
 		r.putPhone = p.putVoicePhone
 		r.accessGone = p.voiceAccessGone
 		r.readSession = p.voiceReadSession
+		r.minimum = p.appMinimumInForce
 		p.voiceTalkState = r
 	})
 

@@ -2,6 +2,75 @@
 
 # Upgrading
 
+## Upgrading to 4.4.0
+
+4.4.0 can show only some of the Mumble server's channels, keeps a person's mute and deafen in step
+with the Mumble server, can look on GitHub for its own new releases so that a system admin installs
+one from the System Console or from Matty, and can turn away a Matty older than one an admin names. Each new setting is off
+or blank until an admin sets it, and until then the plugin does what 4.3.0 did, the mute aside.
+
+- **Mute and deafen hold on the Mumble server.** The Mumble server takes only so many of a person's
+  own state messages (`messageburst`, 5 at once, then `messagelimit`, 1 a second) and drops the rest
+  without a word, so joining or tapping quickly could leave somebody muted there while Matty showed
+  them unmuted, and talking. The plugin now sends only what changes something, a second apart, sends
+  again what the Mumble server did not take, and lets a person's voice up, and shows them talking,
+  only once the Mumble server says they are unmuted. Mute and deafen are answered at once; a join or
+  a move that changes the channel can take up to a second longer. Nothing needs changing on the
+  Mumble server. See [Mute, deafen, and the Mumble server's
+  limit](voice.md#mute-deafen-and-the-mumble-servers-limit).
+- **New in the Mumble section: Channels to show** (blank: every channel, as before). One a line: a
+  name shows every channel of that name, and a path such as `Gaming/Duo`, or `/Lobby` for the Lobby
+  right under the root, shows that channel alone; a channel shown brings the channels under it.
+  Somebody in another channel is not shown in voice, and nobody can join that channel from Matty,
+  move there or play sounds into it; somebody a Mumble admin moves into one stays connected. The
+  **Talking from Matty** card names every line that matches no channel, every line that matches
+  more than one, with the channels it matches, and the lines that are not used: one longer than
+  256 characters, and any after the 200th. See [Showing only some
+  channels](voice.md#showing-only-some-channels).
+- **A new section, Updates: Look for updates** (off: nothing is asked of GitHub) and **Status**, a
+  card with **Check now**. Switched on, the server looks on GitHub for a newer release once a day,
+  once when it is switched on and on **Check now**, and tells the system admins of one, in the
+  panel, in Matty and in one direct message from the bot. The
+  plugin never installs anything: a system admin presses **Install** on the card, or in Matty 0.1.32,
+  and the server downloads the bundle, checks its two signatures and every file, and hands what it
+  checked to that admin's browser or Matty, which uploads it to Mattermost. **Install** needs this
+  plugin to be a signed release, the release to have this server's platform's bundle, and Mattermost
+  to take plugin uploads: **Enable Plugins** and **Enable Plugin Uploads** on, and **Require Plugin
+  Signature** off. Installing restarts the plugin, which drops every phone in voice through Matty
+  for a few seconds. While the setting is on the server reaches `api.github.com` on port 443, and
+  `github.com` and `*.githubusercontent.com` when **Install** is pressed. See [Plugin
+  updates](updates.md) and [What Install needs](updates.md#what-install-needs).
+- **The releases on GitHub are full releases from 4.4.0**, not pre-releases, since GitHub's latest
+  release, which the plugin looks for, leaves pre-releases out. This one is installed by hand: 4.3.0
+  does not look for updates.
+- **New in the App check section: Minimum Matty version** (blank: none). A Matty older than it, or
+  whose version cannot be read, is refused by the plugin's API everywhere but the few places it needs
+  to show why, and one in voice through this server is taken out of voice when the minimum comes into
+  force or is raised. Matty 0.1.32 and newer then close this server with a page asking to update; Matty 0.1.31 and
+  older lose streams, clips, voice and the rest of what they ask the plugin for. It does not stop the
+  push notifications a Matty registered for before, and touches neither chat nor the web panel.
+  Matty says its own version: a changed copy can say any version, or not say it is Matty at all, and
+  then neither this nor the app check refuses it. A number above the newest Matty turns every Matty
+  away. See [A minimum Matty version](security.md#a-minimum-matty-version).
+- **Matty 0.1.32 is the app for 4.4.0**: it shows the Mumble server's word on the person's mute,
+  shows system admins a newer release of the plugin on its Plugins screen, with **Install**, and
+  closes a server whose minimum it is below until it is updated.
+- **No contract change.** It is an addition to revision 4: `voice.channels` and `voice.people` hold
+  only the channels shown and the people in them, and a join or a move to another channel is
+  `404 not_found`; the data channel's `self` gains `selfMuted` and `selfDeafened`, and its `end`
+  `off` also ends the session of a Matty below a minimum that comes into force; `app` in
+  `GET /access` and `GET /me` gains `minimum`, with the refusal `app_outdated`; a system admin's
+  `GET /access` gains `update` and their `GET /me` `updateAlert`; `POST /admin/update/bundle` hands
+  a system admin's client the checked bundle; and the panel's cards have `GET /admin/update`,
+  `POST /admin/update/check`, and `unmatched`, `several`, `tooLong` and `dropped` in `GET /admin/voice`
+  (`contract/README.md`, "Voice", "Plugin updates" and "A minimum Matty"). It works with Matty
+  0.1.28 to 0.1.32.
+- **Nothing to move.** Upgrade as usual, with `ceo.villa.matty-4.4.0-linux-amd64.tar.gz`.
+- **Going back to 4.3.0** shows every channel again, stops looking for updates and answers every
+  Matty; the new settings stay, unused.
+- **Coming from 4.2.0 or earlier?** Read [Upgrading to 4.3.0](#upgrading-to-430) as well, and on
+  back to the version you are coming from.
+
 ## Upgrading to 4.3.0
 
 4.3.0 shows the Mumble server's channels, and lets people **talk in them from the Matty app**:

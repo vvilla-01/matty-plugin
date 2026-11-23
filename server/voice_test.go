@@ -199,6 +199,7 @@ func TestRosterRulesAreComparedSeparatelyFromTheConnection(t *testing.T) {
 		"hidden":   func(c *configuration) { c.VoiceHiddenNames = "Mattermost, Music" },
 		"name map": func(c *configuration) { c.VoiceNameMap = "bob = bobby" },
 		"matching": func(c *configuration) { c.VoiceMatchUsernames = false },
+		"shown":    func(c *configuration) { c.VoiceChannelsShown = "Gaming" },
 	} {
 		changed := *base
 		change(&changed)

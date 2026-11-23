@@ -1,7 +1,7 @@
 // Package standin holds what fakebb runs beside its Broadcast Box so that the
 // whole of VillaNET can be developed on one machine: a stand-in for Steam (the
-// sign-in and the Web API), a stand-in Mumble server and a stand-in UnifiedPush
-// push server.
+// sign-in and the Web API), a stand-in Mumble server, a stand-in UnifiedPush
+// push server, and stand-in GitHub releases of the plugin itself.
 //
 // Each speaks what the real one speaks, so the plugin under test runs the code
 // it runs for real. The Mumble server needs nothing from the plugin: where
