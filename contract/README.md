@@ -223,7 +223,11 @@ session after a new sign-in, proves itself again.
   new ones." When the setting `check`, the certificates or boot keys it accepts, or the Site URL
   change, the server sends the `me` event to everybody; a Matty then asks `GET /access` again and
   proves itself if its verdict no longer counts.
-  `reason` may also come with `none` when the server could not read its records just now.
+  `reason` may also come with `none` when the server could not read its records just now, and,
+  from 4.5.0, with `check` at `require` and a minimum in force (see "A minimum Matty"), to a client
+  whose `User-Agent` says a version that meets the minimum while its session's pass was proved with
+  an older version, or with none kept: then `state` is `none`, with no `versionCode`, and the
+  reason is the refusal's sentence, so that the client proves itself again.
 - `development`, with `verified`: only the development build of the plugin would pass it (an
   emulator, a debug build). A client says so beside the verdict.
 - `versionCode` is the app's version code as Android attested it. A verdict lasts 30 days or until
@@ -293,9 +297,13 @@ An addition to revision 4, from 4.4.0: `minimum` in the `app` of `GET /access` a
 the refusal `app_outdated` (`fixtures/access-app-minimum.json`, `fixtures/refusal-app-outdated.json`).
 Only a client whose `User-Agent` begins `Matty/` is ever refused by it.
 
-While an admin has set **Minimum Matty version** (under **App check**) to a version `N.N.N`,
-`app.minimum` is that version, for everybody, whatever `app.check` is; otherwise it is left out. A
-setting that is not `N.N.N` counts as none. The server reads a Matty's version from its
+`app.minimum` is the minimum in force, for everybody, whatever `app.check` is, and is left out
+while there is none. An admin sets **Minimum Matty version** (under **App check**) to no minimum, to
+a version `N.N.N`, which is then the minimum, or, from 4.5.0, to the latest release of Matty: the
+newest release on GitHub that the server knows, which it looks for once a day and when an admin
+asks, and none until it knows one. A setting that is neither counts as none. When a look finds
+another version, every node answers it within seconds, and the server sends the `me` event to
+everybody once. The server reads a Matty's version from its
 `User-Agent`: what follows `Matty/` up to the first space, with a `-…` or `+…` ending left out
 (`Matty/0.1.32-debug (Android 17; Mattermost client)` is 0.1.32), compared with `minimum` part by
 part. A request whose `User-Agent` begins `Matty/` with a version older than `minimum`, or with no
@@ -319,10 +327,37 @@ since an admin may lower or clear the minimum.
 
 The minimum stops the plugin's routes and voice, and nothing else: a push registration made before
 it keeps receiving pushes, and the `streams` event, sent to every open client, still reaches an old
-Matty, which cannot play from it. The version is the client's own word: a changed copy can say any
-version, or not say it is Matty at all, and then neither the minimum nor the app check refuses it.
-The app check at `require` turns away only a copy that says it is Matty and is not the official
-build.
+Matty, which cannot play from it. With `app.check` at `off` or `report`, the version is the
+client's own word: a changed copy can say any version, or not say it is Matty at all, and then
+neither the minimum nor the app check refuses it.
+
+From 4.5.0, with `app.check` at `require`, the minimum also goes by what the phone proved. A
+verdict keeps the version the client's `User-Agent` said in its `POST /app/attest`, beside the
+attested `versionCode`; a pass kept without it counts as given under rules that have changed (state
+`none`), so that the client proves itself again. After the two refusals above, a request saying it
+is Matty from a session whose pass carries a version older than `minimum`, or none, is refused with
+`403`, `Cache-Control: no-store` and `app_unverified`: "Matty answers only the official Matty app,
+and this copy has to be checked again: this server needs Matty 0.1.33 or newer, and this phone last
+proved Matty 0.1.32." (the server's name for the plugin first, and without the last part when no
+version was kept). To a Matty whose `User-Agent` meets the minimum while its session's pass is
+refused this way, `GET /access` and `GET /me` say `none`, with that sentence (see "The app
+check"). A session whose pass carries a version that meets `minimum` passes whatever its
+`User-Agent` says now, as long as the first refusal lets it through, and is told `verified`. A
+voice session held by a join from a session whose pass is refused this way ends with `end` `off`
+and that sentence when a minimum comes into force above what it proved, and a join is refused as
+the gate refuses. A client that was just updated proves itself
+again because its version code is no longer `versionCode`, and passes.
+
+`GET /admin/appcheck` is the System Console's card, for system admins (`403` otherwise): the
+setting `check`, `minimum` while one is in force, `minimumFrom` (`setting` or `latest`, left out
+for none), `latest` while the setting is the latest release (`{version?, lookedAt?, trouble?,
+troubleAt?}`, times in ms, the trouble left out from the next look that works), `byWord` (true
+while a minimum is in force and `check` is not `require`), `problem`, and `people`, each with its
+sessions' verdicts, `said` among them, the version kept with the verdict. From 4.5.0,
+`POST /admin/appcheck/latest` looks for the newest Matty at once and answers the same: `409
+conflict` while the setting is not the latest release, `429 rate_limited` within a minute of the
+last look anybody asked for (`retryAfterMs` is what is left of that minute, at least 1000), `503
+store` when the store did not answer.
 
 ## A refusal
 
@@ -354,7 +389,7 @@ The codes a client of the routes above meets:
 | Code | From | Means |
 | --- | --- | --- |
 | `app_outdated` | every route of the plugin's API but `GET /access`, `/me`, `/release`, the two app check routes, `DELETE /me/push` and `POST /voice/leave`, to a request saying it is Matty, while a minimum Matty version is set, from 4.4.0 | This Matty is older than the server's minimum, or says no version that can be read; the sentence names the version needed. Asking again works once the app is updated or the server's minimum allows it: read `GET /access` again (see "A minimum Matty"). |
-| `app_unverified` | every route but `GET /access`, `/me`, `/release`, the two app check routes, `DELETE /me/push` and `POST /voice/leave`, to a request saying it is Matty, while the app check is `require` | This session's Matty has not passed the app check: not checked yet, or checked and failed (the sentence says which). Prove it (see "The app check") and ask again; a Matty that failed for what it is (another certificate, an unlocked phone) fails again. |
+| `app_unverified` | every route but `GET /access`, `/me`, `/release`, the two app check routes, `DELETE /me/push` and `POST /voice/leave`, to a request saying it is Matty, while the app check is `require` | This session's Matty has not passed the app check: not checked yet, or checked and failed (the sentence says which); or, from 4.5.0, it passed with a version older than the minimum in force, or with none kept ("… has to be checked again: this server needs Matty 0.1.33 or newer, and this phone last proved Matty 0.1.32."). Prove it (see "The app check") and ask again; a Matty that failed for what it is (another certificate, an unlocked phone) fails again. |
 | `locked`, `watch_only` | any route that is not open | The reader may not do this: not let in at all, or let in to watch where a link is needed. Ask `GET /access` again (duty 3). |
 | `store` | any | The server could not read or save just now (its app check records among them, while the app check is `require`), or, from `PUT /me/push`, its confirm and its test, push is switched on but the server's push key is not ready yet. Worth trying again: a client keeps what it still has to send. |
 | `rate_limited` | any metered route | Too often. `retryAfterMs` says when. Never from `DELETE /me/link`, `DELETE /me/banner`, the Twitch, Steam and Hytale disconnects (`DELETE /twitch/link`, `/steam/link`, `/hytale/link`) or dismissing their notices, which no meter stands in front of. Leaving or cancelling a plan, clearing What's on?, going back to Automatic and removing your own sounds share their route's meter (the schedule's, What's on?'s, the award picker's, the soundboard's edits), whose wait is seconds and is given in `retryAfterMs`. |

@@ -1,6 +1,7 @@
 import React from 'react';
 
-import {fetchAdminAppCheck, fetchRelease} from '../client';
+import {latestCheckOffered, minimumLines, verdictVersion} from '../appCheckAdmin';
+import {checkAdminAppLatest, fetchAdminAppCheck, fetchRelease} from '../client';
 import type {AdminAppCheck as AppCheckView, AdminAppCheckVerdict} from '../client';
 import {fingerprint, sha256Hex} from '../sha256';
 import {postedAt, postedWhen, viewerZone} from '../time';
@@ -12,7 +13,11 @@ import type {AdminCardProps} from './adminParts';
 // System Console > Plugins > Matty > App check, the AppCheckList setting:
 // first one quiet line about this plugin's own files (GET /api/v1/release),
 // then who has proved a genuine Matty and who has not (GET
-// /api/v1/admin/appcheck), newest first, with the counts over them.
+// /api/v1/admin/appcheck), newest first, with the counts over them, and
+// what Minimum Matty version holds in force and what it goes by. While that
+// setting is the latest release, Check now looks for the newest Matty at
+// once (POST /api/v1/admin/appcheck/latest), which the server allows once a
+// minute and never while the setting is anything else.
 //
 // The plugin's line is here rather than under Troubleshooting because this is
 // where an admin is already looking at signatures: the release is signed with
@@ -23,8 +28,10 @@ import type {AdminCardProps} from './adminParts';
 //
 // Read-only: nothing here is saved, so it never calls onChange. A verdict
 // shows what the server sends of it and no more: who, when, verified or not
-// and why in the server's own words, the app's version code as Android
-// attested it, and whether only the development build would pass it. The
+// and why in the server's own words, the version the app said as it proved
+// itself beside its version code as Android attested it, and whether only
+// the development build would pass it. The minimum's lines are
+// appCheckAdmin.ts's, which build/check-appcheck.mjs holds. The
 // phone's security level and boot state, the session and what the app says
 // of itself are kept by the server and not shown.
 
@@ -71,10 +78,6 @@ function modeLine(check: string): string {
     }
 }
 
-// What Minimum Matty version does now, in a line, while one is set.
-const minimumLine = (minimum: string): string =>
-    `A Matty older than ${minimum}, or one whose version cannot be read, is refused by this plugin's API everywhere but the few places it needs to show why.`;
-
 // What this plugin's files are, in words.
 function releaseWords(release: ReleaseAnswer): {text: string; error: boolean} {
     const version = release.version ? ` ${release.version}` : '';
@@ -100,6 +103,8 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
     const [error, setError] = React.useState('');
     const [loading, setLoading] = React.useState(true);
     const [all, setAll] = React.useState(false);
+    const [checking, setChecking] = React.useState(false);
+    const [note, setNote] = React.useState('');
     const {statusRef, focus} = useCardFocus();
 
     const alive = React.useRef(true);
@@ -114,6 +119,7 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
     const load = React.useCallback(() => {
         setLoading(true);
         setError('');
+        setNote('');
         setReleaseError('');
 
         const releaseRead = fetchRelease().then((answer) => {
@@ -146,6 +152,28 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
     }, []);
 
     React.useEffect(load, [load]);
+
+    // Check now: the server looks for the newest Matty and answers the card
+    // as it then stands; a refusal is the server's sentence.
+    const check = React.useCallback(() => {
+        setChecking(true);
+        setError('');
+        setNote('');
+        checkAdminAppLatest().then((answer) => {
+            if (alive.current) {
+                setView(answer);
+                setNote('Looked just now.');
+            }
+        }).catch((reason: unknown) => {
+            if (alive.current) {
+                setError(reason instanceof Error ? reason.message : String(reason));
+            }
+        }).finally(() => {
+            if (alive.current) {
+                setChecking(false);
+            }
+        });
+    }, []);
 
     // Worked out once for each manifest the server sends.
     const manifestSum = React.useMemo(() => (release?.manifest ? fingerprint(sha256Hex(release.manifest)) : ''), [release?.manifest]);
@@ -217,7 +245,12 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
             <h4 className='vntv-admin-sub'>{'Matty apps'}</h4>
             <AdminHead>{head}</AdminHead>
             {view ? <p className='vntv-admin-line'>{modeLine(view.check)}</p> : null}
-            {view?.minimum ? <p className='vntv-admin-line'>{minimumLine(view.minimum)}</p> : null}
+            {view ? minimumLines(view, (at) => postedWhen(at, zone)).map((line) => (
+                <p
+                    key={line.text}
+                    className={line.tone === 'error' ? 'vntv-admin-line vntv-notice-error' : 'vntv-admin-line'}
+                >{line.text}</p>
+            )) : null}
             {view?.problem ? <p className='vntv-admin-line vntv-notice-error'>{view.problem}</p> : null}
 
             {/* What a verdict is worth, said where the verdicts are. */}
@@ -232,6 +265,7 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
                     {shown.map((row) => {
                         const state = stateOf(row);
                         const reason = state === 'verified' ? '' : (row.reason || '').trim();
+                        const version = verdictVersion(row);
 
                         return (
                             <li
@@ -259,7 +293,7 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
                                             dateTime={new Date(row.at).toISOString()}
                                             title={postedAt(row.at, zone)}
                                         >{postedWhen(row.at, zone)}</time>
-                                        {row.versionCode ? ` · app version code ${row.versionCode}` : ''}
+                                        {version ? ` · ${version}` : ''}
                                     </p>
                                     {reason !== '' && <p className='vntv-admin-row-meta vntv-appcheck-reason'>{reason}</p>}
                                 </div>
@@ -273,15 +307,23 @@ export const AdminAppCheck: React.FC<AdminCardProps> = ({id, label}) => {
                 {rows.length > shown.length ? (
                     <AdminPill onPress={() => setAll(true)}>{`Show all ${rows.length}`}</AdminPill>
                 ) : null}
+                {latestCheckOffered(view) ? (
+                    <AdminPill
+                        waiting={loading || checking}
+                        onPress={check}
+                        working={checking}
+                        workingWords='Looking…'
+                    >{'Check now'}</AdminPill>
+                ) : null}
                 <AdminPill
-                    waiting={loading}
+                    waiting={loading || checking}
                     onPress={load}
                 >{'Refresh'}</AdminPill>
             </div>
 
             <AdminStatus
                 ref={statusRef}
-                note=''
+                note={note}
                 error={error}
             />
         </AdminCard>

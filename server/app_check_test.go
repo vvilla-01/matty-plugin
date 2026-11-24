@@ -256,7 +256,10 @@ func TestTheOfficialMattyProvesItselfForItsSession(t *testing.T) {
 		VersionCode: 28, Level: "tee", BootState: "verified",
 		Package: "ceo.villa.matty", Digest: release.OfficialRSASHA256, RevocationList: appcheck.RevocationListDate,
 		Claims: &appCheckClaims{Package: "ceo.villa.matty", VersionCode: 28, CurrentSigner: "75:78:CB:63", History: []string{"E5:52:50:BE", "75:78:CB:63"}, Hybrid: true},
+		Said:   "0.1.27",
 		Rules:  rulesNow(t, a),
+
+		SaidKept: true,
 	}, kept)
 	require.Empty(t, a.kv(appCheckChallengeKey(davesPhone, 0)), "the challenge is spent")
 
@@ -444,6 +447,7 @@ func TestAVerdictStopsCountingOnceWhatItWasGivenForIsNot(t *testing.T) {
 	good := appCheckResult{
 		User: sceneLinked, Verified: true, At: now.UnixMilli(), Expires: now.Add(time.Hour).UnixMilli(),
 		Package: mattyPackage, Digest: release.OfficialRSASHA256, RevocationList: appcheck.RevocationListDate,
+		SaidKept: true,
 	}
 	require.NoError(t, a.p.keepResult(davesPhone, &good, now))
 	require.Equal(t, http.StatusOK, streams(davesPhone))

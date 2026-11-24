@@ -55,7 +55,10 @@
 // With -releases DIR it also stands in for GitHub's releases of the plugin,
 // for the plugin's own updates: the newest release, its bundles and the two
 // certificates they are signed with, from a folder
-// build/make-standin-update.sh makes. Only the stand-in build asks here too.
+// build/make-standin-update.sh makes; and for the newest release of Matty,
+// while Minimum Matty version is the latest release, from the file
+// app-latest in that folder (one line, a version). Only the stand-in build
+// asks here too.
 //
 // Never part of a release: nothing under build/ is in the plugin bundle.
 package main
@@ -132,7 +135,7 @@ func main() {
 	steam := flag.String("steam", "victor=Factorio,alice=Hades,bob,carol", "Steam accounts there are from the start: name, or name=game for somebody in a game, comma separated")
 	mumble := flag.String("mumble", "127.0.0.1:64738", "where the stand-in Mumble server listens; empty for none")
 	voice := flag.String("voice", "bob,carol=muted,Guest", "who is in voice from the start: name, name=muted or name=deafened, comma separated")
-	releases := flag.String("releases", "", "a folder of stand-in releases of the plugin (build/make-standin-update.sh), served as GitHub serves its releases; empty for none")
+	releases := flag.String("releases", "", "a folder of stand-in releases of the plugin (build/make-standin-update.sh), and of the newest Matty in its file app-latest, served as GitHub serves releases; empty for none")
 	flag.Parse()
 
 	api, err := newBoxAPI()
@@ -168,7 +171,7 @@ func main() {
 	log.Printf("stand-in Steam on http://%s (accounts: %s)", *addr, *steam)
 	log.Printf("stand-in push server on http://%s/push/", *addr)
 	if *releases != "" {
-		log.Printf("stand-in releases of the plugin on http://%s from %s", *addr, *releases)
+		log.Printf("stand-in releases of the plugin and of Matty on http://%s from %s", *addr, *releases)
 	}
 
 	if *mumble != "" {
@@ -194,8 +197,8 @@ func main() {
 
 // routes is everything served on the one port: Broadcast Box, the steering
 // of its streams, the stand-in Steam with these accounts, the stand-in push
-// server and the plugin's stand-in releases from the folder releases ("" for
-// none).
+// server and the stand-in releases of the plugin and of Matty from the
+// folder releases ("" for none).
 func (b *box) routes(steamAccounts []string, releases string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", b.status)

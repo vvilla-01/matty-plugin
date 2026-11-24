@@ -126,3 +126,36 @@ func TestStandInSaysItsOwnVersionEverywhere(t *testing.T) {
 	require.Equal(t, updateRunning, runningVersion())
 	require.Equal(t, runningVersion(), newUpdateRuntime().running)
 }
+
+// The stand-in build asks the stand-in beside it for the newest Matty too,
+// and the stand-in answers from its folder's app-latest.
+func TestStandInAnswersTheNewestMattyFromAppLatest(t *testing.T) {
+	require.Equal(t, standInSteam+"/repos/vvilla-01/matty/releases/latest", appLatestAddress(newUpdateRuntime()))
+
+	dir := t.TempDir()
+	mux := http.NewServeMux()
+	standin.NewReleases(dir).Routes(mux)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	l := newLatestScene(t)
+	p := l.nodeWith(false, func(r *updateRuntime) {
+		r.apiBase, r.siteBase, r.plainOK = server.URL, server.URL, true
+		r.transport = http.DefaultTransport.(*http.Transport).Clone()
+	})
+	p.setConfiguration(&configuration{MinimumAppVersion: "latest"})
+
+	lookLatest(p)
+	require.Equal(t, appLatestSeen{LookedAt: l.clock().UnixMilli()}, p.appLatestNow(), "no app-latest: no release")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "app-latest"), []byte("0.1.33\n"), 0o644))
+	l.advance(time.Hour)
+	lookLatest(p)
+	require.Equal(t, appLatestSeen{Version: "0.1.33", LookedAt: l.clock().UnixMilli()}, p.appLatestNow())
+	require.Equal(t, "0.1.33", p.appMinimumInForce())
+
+	require.NoError(t, os.Remove(filepath.Join(dir, "app-latest")))
+	l.advance(time.Hour)
+	lookLatest(p)
+	require.Equal(t, appLatestSeen{Version: "0.1.33", LookedAt: l.clock().UnixMilli(), Trouble: "GitHub says Matty has no release.", TroubleAt: l.clock().UnixMilli()}, p.appLatestNow())
+}

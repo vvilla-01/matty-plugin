@@ -181,3 +181,82 @@ func TestNoDocSaysThePluginNeverReceivesAudio(t *testing.T) {
 		require.NotContains(t, strings.Join(strings.Fields(string(document)), " "), "never receives a byte", name)
 	}
 }
+
+// With Minimum Matty version set to the latest release, the server asks
+// GitHub for Matty's newest release, whatever Look for updates says
+// (docs/security.md, "The minimum Matty"). So a sentence that ties GitHub to
+// Look for updates or to the plugin's updates alone (nothing is asked of
+// GitHub with it off, GitHub only if it is on, "GitHub, for the plugin's
+// updates" in a list of what is contacted) must also name the minimum.
+var githubForUpdatesAlone = regexp.MustCompile(`(?i)github[^.]*(?:\bonly\b|\bnothing\b|\bnever\b)[^.]*(?:look for updates|updates)|(?:\bonly\b|\bnothing\b|\bnever\b)[^.]*github[^.]*(?:look for updates|updates)|(?:look for updates|updates)[^.]*(?:\bonly\b|\bnothing\b|\bnever\b)[^.]*github|nothing is asked of github|github,? (?:only )?(?:if|while) [^.]*look for updates|github,? for (?:\*\*)?(?:look for updates|the plugin's updates|plugin updates)|(?:look for updates|plugin's updates)(?:\*\*)? \(github\)`)
+
+// namesTheMinimum is whether a sentence names the other reason GitHub is
+// asked, or keeps to the plugin's own releases ("about Matty Plugin's
+// releases").
+func namesTheMinimum(sentence string) bool {
+	lower := strings.ReplaceAll(strings.ToLower(sentence), "’", "'")
+	for _, words := range []string{"minimum matty version", "matty's releases", "matty's newest release", "about matty plugin's releases"} {
+		if strings.Contains(lower, words) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func TestNoSentenceTiesGitHubToThePluginsUpdatesAlone(t *testing.T) {
+	raw, err := os.ReadFile("../plugin.json")
+	require.NoError(t, err)
+	var manifest struct {
+		SettingsSchema struct {
+			Sections []struct {
+				Subtitle string `json:"subtitle"`
+				Settings []struct {
+					HelpText string `json:"help_text"`
+				} `json:"settings"`
+			} `json:"sections"`
+		} `json:"settings_schema"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &manifest))
+
+	texts := map[string]string{}
+	for _, section := range manifest.SettingsSchema.Sections {
+		texts["plugin.json subtitle "+section.Subtitle] = section.Subtitle
+		for _, setting := range section.Settings {
+			texts["plugin.json "+setting.HelpText[:min(40, len(setting.HelpText))]] = setting.HelpText
+		}
+	}
+	for _, name := range append(documents(t), "../contract/README.md", "../webapp/src/updateAdmin.ts") {
+		document, err := os.ReadFile(name)
+		require.NoError(t, err)
+		texts[name] = string(document)
+	}
+
+	var found []string
+	for name, text := range texts {
+		for _, sentence := range sentencesOf(text) {
+			if githubForUpdatesAlone.MatchString(sentence) && !namesTheMinimum(sentence) {
+				found = append(found, name+": "+sentence)
+			}
+		}
+	}
+	require.Empty(t, found, "these tie GitHub to Look for updates or to the plugin's updates alone, and do not name Minimum Matty version")
+}
+
+// The pattern knows the wordings the documents used before the minimum
+// could be the latest release, and lets through the ones that name it.
+func TestTheGitHubPatternKnowsEveryWording(t *testing.T) {
+	for _, sentence := range []string{
+		"Off by default, and then nothing is asked of GitHub.",
+		"Look for updates is off: nothing is asked of GitHub.",
+		"**GitHub, only if an admin switches on \"Look for updates\"** (off by default, under **Updates**).",
+		"That is the Mumble server for voice, and GitHub for **Look for updates**.",
+		"Matty contacts Twitch, and GitHub, for the plugin's updates, by the Mattermost server.",
+		"Hytale names (Hytale), the plugin's updates (GitHub) and UnifiedPush push servers.",
+		"**Look for updates** (GitHub) are the only outside connections Matty makes.",
+	} {
+		require.True(t, githubForUpdatesAlone.MatchString(sentence), "the pattern misses %q", sentence)
+		require.False(t, namesTheMinimum(sentence), sentence)
+	}
+	require.True(t, namesTheMinimum("GitHub, for Look for updates and for Minimum Matty version at the latest release."))
+}

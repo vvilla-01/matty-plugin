@@ -50,6 +50,7 @@ func TestAReleaseDoesNotCountADevelopmentVerdict(t *testing.T) {
 	good := appCheckResult{
 		User: sceneLinked, Verified: true, At: now.UnixMilli(), Expires: now.Add(time.Hour).UnixMilli(),
 		Package: mattyPackage, Digest: release.OfficialRSASHA256, RevocationList: appcheck.RevocationListDate,
+		SaidKept: true,
 	}
 	require.NoError(t, a.p.keepResult(davesPhone, &good, now))
 	require.Equal(t, "verified", a.appWordOf(t, "/api/v1/access", sceneLinked, davesPhone)["state"])

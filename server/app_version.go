@@ -6,7 +6,9 @@ import (
 )
 
 // The oldest Matty this server answers: the Minimum Matty version setting
-// (MinimumAppVersion), under App check. Matty says its version first in its
+// (MinimumAppVersion), under App check, which is blank for none, "latest"
+// for the newest release of Matty this server knows (app_latest.go), or a
+// version N.N.N. Matty says its version first in its
 // User-Agent ("Matty/0.1.32 (Android 17; Mattermost client)", or
 // "Matty/0.1.32-debug" for a debug build). A request that says it is Matty
 // with a version older than the minimum, or with no version that can be
@@ -23,14 +25,22 @@ import (
 //
 // The version is the app's own word: a changed copy can say any version, or
 // not say it is Matty at all, and then neither this nor the app check
-// refuses it. The app check, set to refuse, turns away only a copy that says
-// it is Matty and is not the official build.
+// refuses it. The app check, set to refuse, turns away a copy that says it
+// is Matty and is not the official build, and holds a session that passed
+// to the version its app said as it proved itself (appProvenText), so that
+// with it the minimum goes by what the phone proved.
 
 // codeAppOutdated is the refusal of a Matty older than the minimum.
 const codeAppOutdated = "app_outdated"
 
-// appMinimum is the setting as a version, or "" when there is none: blank,
-// or anything that is not N.N.N.
+// Where the minimum comes from, as the admin card's minimumFrom says it.
+const (
+	appMinimumFromSetting = "setting"
+	appMinimumFromLatest  = "latest"
+)
+
+// appMinimum is the setting as a version, or "" when it holds none: blank,
+// latest, or anything that is not N.N.N.
 func (c *configuration) appMinimum() string {
 	minimum := strings.TrimSpace(c.MinimumAppVersion)
 	if !updateVersionRE.MatchString(minimum) {
@@ -40,16 +50,49 @@ func (c *configuration) appMinimum() string {
 	return minimum
 }
 
-// appMinimumInForce is the minimum of the settings as they are now, or "".
-func (p *Plugin) appMinimumInForce() string {
-	return p.getConfiguration().appMinimum()
+// appMinimumLatest is whether the setting is the latest release: "latest"
+// in any case, with spaces around it.
+func (c *configuration) appMinimumLatest() bool {
+	return strings.EqualFold(strings.TrimSpace(c.MinimumAppVersion), appMinimumFromLatest)
 }
 
-// appMinimumProblem says that the setting holds something that is not a
-// version and so counts as none, for the app check's card, or "".
+// appMinimumFrom is which of the setting's three values it holds: "setting"
+// for a version, "latest", or "" for none, blank or anything else.
+func (c *configuration) appMinimumFrom() string {
+	switch {
+	case c.appMinimumLatest():
+		return appMinimumFromLatest
+	case c.appMinimum() != "":
+		return appMinimumFromSetting
+	default:
+		return ""
+	}
+}
+
+// appMinimumFor is the minimum in force under cfg, or "": the setting's
+// version, or, for the latest release, the version this node knows, and
+// none while it knows none. Every reader of the minimum asks this: the
+// gate, /access and /me, the admin card, a voice join and endOutdated.
+func (p *Plugin) appMinimumFor(cfg *configuration) string {
+	if cfg.appMinimumLatest() {
+		return p.appLatestNow().Version
+	}
+
+	return cfg.appMinimum()
+}
+
+// appMinimumInForce is the minimum in force under the settings as they are
+// now, or "".
+func (p *Plugin) appMinimumInForce() string {
+	return p.appMinimumFor(p.getConfiguration())
+}
+
+// appMinimumProblem says that the setting holds something that is neither
+// a version nor the latest release and so counts as none, for the app
+// check's card, or "".
 func (c *configuration) appMinimumProblem() string {
 	shown := strings.TrimSpace(c.MinimumAppVersion)
-	if shown == "" || c.appMinimum() != "" {
+	if shown == "" || c.appMinimumFrom() != "" {
 		return ""
 	}
 
@@ -75,7 +118,7 @@ func mattyOf(userAgent string) (bool, string) {
 }
 
 // passAppVersionGate refuses a Matty older than the minimum, or whose
-// version cannot be read, while a minimum is set. True when the request may
+// version cannot be read, while a minimum is in force. True when the request may
 // go on; otherwise it has answered. It runs before the app check's gate, on
 // the same routes: a Matty that is too old is told so rather than asked to
 // prove itself.
@@ -84,7 +127,7 @@ func (p *Plugin) passAppVersionGate(w http.ResponseWriter, r *http.Request) bool
 		return true
 	}
 
-	minimum := p.getConfiguration().appMinimum()
+	minimum := p.appMinimumInForce()
 	if minimum == "" {
 		return true
 	}

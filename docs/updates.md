@@ -8,12 +8,12 @@ Matty Plugin can look on GitHub for a newer release of itself and tell the syste
 is one, and a system admin can then install it from the System Console or from Matty, which asks
 first. It is one setting, **System Console > Plugins > Matty > Updates > Look for updates**:
 
-- **Off**, the default. Nothing is asked of GitHub, nobody is told anything, no daily job runs, and
-  no bundle is handed out. A server that has never had this set is off.
+- **Off**, the default. Nothing is asked of GitHub about Matty Plugin's releases, nobody is told
+  anything, no daily job runs, and no bundle is handed out. A server that has never had this set is off.
 - **On.** The server looks once a day, once when the setting is switched on, and whenever an admin
   presses **Check now** on the card under it. When the newest release is newer than the one running,
-  system admins see "Matty Plugin 4.5.0 is out." among the panel's alerts, with a link to its page;
-  Matty 0.1.32 and later say "Matty Plugin 4.5.0 is available" on the Plugins screen of a system
+  system admins see "Matty Plugin 4.6.0 is out." among the panel's alerts, with a link to its page;
+  Matty 0.1.32 and later say "Matty Plugin 4.6.0 is available" on the Plugins screen of a system
   admin; the card says so; and the plugin's bot sends each system admin one direct message about it.
 
 Installing is always a system admin's own press of **Install**, on the card or in Matty. The plugin
@@ -29,7 +29,7 @@ answer.
 
 ## What is asked of GitHub
 
-While the setting is on, and only then:
+For the plugin's own releases, while the setting is on, and only then:
 
 - **Looking** is one request from the Mattermost server to
   `https://api.github.com/repos/vvilla-01/matty-plugin/releases/latest`: HTTPS only, at most 15
@@ -55,10 +55,16 @@ A firewall that limits what the Mattermost server may reach must let it reach `a
 port 443 for the look, and `github.com` and `*.githubusercontent.com` on port 443 for **Install**.
 [LOCKDOWN.md](../LOCKDOWN.md) lists every address the plugin may reach.
 
+**Minimum Matty version** (under **App check**) set to **The latest release of Matty** asks GitHub
+too, whatever this setting says: `api.github.com`, for the newest release of Matty, once a day and
+on its own **Check now** under **Results**. Its look has its own daily job and its own claims, so
+neither look delays or skips the other. See [A minimum Matty
+version](security.md#a-minimum-matty-version).
+
 ## Installing a newer version
 
-**Install 4.5.0** is on the card while a newer version is known and it can be installed from here.
-A press asks first: "Install Matty Plugin 4.5.0? The plugin restarts, which takes a few seconds.",
+**Install 4.6.0** is on the card while a newer version is known and it can be installed from here.
+A press asks first: "Install Matty Plugin 4.6.0? The plugin restarts, which takes a few seconds.",
 and, when phones are in voice through Matty, how many, since a restart drops them for a few seconds
 (each joins again by itself). Then:
 
@@ -79,7 +85,7 @@ and, when phones are in voice through Matty, how many, since a restart drops the
 3. **"Handing it to Mattermost…"** The browser uploads that archive to Mattermost's own plugin
    upload, as **System Console > Plugins > Plugin Management** does, with the admin's own session.
    Mattermost puts the new version in place of the running one and starts it.
-4. **"Matty Plugin 4.5.0 is installed. Reload this page to see its panel."**
+4. **"Matty Plugin 4.6.0 is installed. Reload this page to see its panel."**
 
 In Matty the same happens from the Plugins screen: the app gets the checked bundle from this server
 and uploads it to this server, and nothing goes anywhere else.
@@ -95,7 +101,7 @@ hold no word of the download, and the buttons come back. If the plugin stops in 
 answer is "The plugin stopped while it got the bundle. Try again once it is back." The card uploads
 nothing but a whole bundle of the version it asked about: an answer that is not one is "The bundle
 did not arrive whole. Try again in a moment.", and when another look found a newer version
-meanwhile, it says "A newer version, 4.6.0, was found meanwhile. Press Install again in a minute."
+meanwhile, it says "A newer version, 4.7.0, was found meanwhile. Press Install again in a minute."
 and **Install** names that version. The bundle it refused counts as the minute's, so the next press
 works a minute later.
 
@@ -110,9 +116,9 @@ The card offers **Install** only when all of this holds, and otherwise says whic
 
 1. **This plugin is a signed release** (see [Signed releases](security.md#signed-releases)). A
    development build, or anybody's own build, does not install releases: "This copy of Matty Plugin
-   is not a signed release, so it does not install releases. Install 4.5.0 by hand from its page."
+   is not a signed release, so it does not install releases. Install 4.6.0 by hand from its page."
 2. **The release has the bundle for this server's platform**, such as
-   `ceo.villa.matty-4.5.0-linux-amd64.tar.gz`: "Matty Plugin 4.5.0 has no bundle for this server's
+   `ceo.villa.matty-4.6.0-linux-amd64.tar.gz`: "Matty Plugin 4.6.0 has no bundle for this server's
    platform (linux-amd64)." The card names the platform.
 3. **Mattermost takes plugin uploads:** **Enable Plugins** and **Enable Plugin Uploads** on, and
    **Require Plugin Signature** off, all under **System Console > Plugins > Plugin Management**.
@@ -125,7 +131,7 @@ Only a system admin sees the card, and only a system admin is handed a bundle.
 
 The plugin's bot sends them, in each system admin's direct messages with it: at most twenty system
 admins, people who are active, and never a bot. Each admin gets one message for a version, however
-many nodes the server has: "Matty Plugin 4.5.0 is out. To install it, a system admin opens System
+many nodes the server has: "Matty Plugin 4.6.0 is out. To install it, a system admin opens System
 Console > Plugins > Matty > Updates. What is new:" and the page. When not one admin could be
 reached, the next look tries again.
 
@@ -155,7 +161,9 @@ new version's **Install** alone until a release that starts is out.
 The stand-in build (`make standin-linux`) never asks GitHub. In its place it asks the stand-in
 beside it (`build/fakebb`, on `127.0.0.1:7788`), which answers as GitHub does from a folder named on
 its command line, `fakebb -releases <folder>`, and answers 404, as GitHub does with no release,
-without one. `build/make-standin-update.sh <version> <folder>` makes such a folder outside this
+without one. The same folder answers for the newest Matty, from a file in it named `app-latest`
+holding one version: a release `v<version>` with the app `matty-<version>.apk`, or 404 without the
+file. `build/make-standin-update.sh <version> <folder>` makes such a folder outside this
 tree: the stand-in build of a version you choose, in the release layout, signed with throwaway keys
 it makes for the purpose, checked as the plugin checks a bundle before it hands it out, and the two
 certificates beside it, which are the ones the stand-in build checks a bundle against. It refuses

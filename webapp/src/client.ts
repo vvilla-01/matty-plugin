@@ -177,16 +177,28 @@ export const fetchRelease = (): Promise<ReleaseAnswer> => requestJSON<ReleaseAns
 // GET /api/v1/admin/appcheck, for system admins: every person whose Matty
 // has a verdict that has not expired, and each of their sign-ins' verdicts
 // (server/app_check.go appCheckAdminView). check is the setting; minimum is
-// the oldest Matty this server answers, while one is set; problem says which
-// lines of the two lists of digests were left out, and that Minimum Matty
-// version counts as none when it is not a version. Of each verdict:
-// verified, and development beside it when only the plugin's development
-// build would pass it; reason, the server's words, when it is not verified;
-// at and expires (ms); versionCode, the app's version code as Android
-// attested it; stale, a verdict of verified given under what this server no
-// longer accepts, which the server already sends as not verified with its
-// reason. The rest of what the server keeps (the session, the phone's
-// security level and boot state, what the app says of itself) is not read.
+// the oldest Matty this server answers, while one is in force; minimumFrom,
+// where the setting takes it from ("setting" for a version, "latest" for the
+// newest release of Matty, left out for none); latest, only while the
+// setting is the latest release, how the look for it stands: the version
+// known, when the last look ended (lookedAt, ms), and the last trouble with
+// its time, left out from the next look that works; byWord, while a minimum
+// is in force and the check is not at "require", that the minimum goes by
+// what each Matty says of itself rather than by what its phone proved;
+// problem says which lines of the two lists of digests were left out, and
+// that Minimum Matty version counts as none when it is neither a version nor
+// the latest release. Of each verdict: verified, and development beside it
+// when only the plugin's development build would pass it; reason, the
+// server's words, when it is not verified; at and expires (ms); versionCode,
+// the app's version code as Android attested it; said, the version the app
+// said as it proved itself, kept with the verdict; stale, a verdict of
+// verified given under what this server no longer accepts, which the server
+// already sends as not verified with its reason. The rest of what the
+// server keeps (the session, the phone's security level and boot state,
+// what the app says of itself) is not read. POST .../appcheck/latest looks
+// for the newest Matty at once and answers the same; it is refused 409
+// while the setting is not the latest release and 429 within a minute of
+// the last time.
 export type AdminAppCheckVerdict = {
     verified: boolean;
     development?: boolean;
@@ -194,6 +206,7 @@ export type AdminAppCheckVerdict = {
     at: number;
     expires: number;
     versionCode?: number;
+    said?: string;
     stale?: boolean;
 };
 
@@ -203,14 +216,26 @@ export type AdminAppCheckPerson = {
     sessions: AdminAppCheckVerdict[];
 };
 
+export type AdminAppCheckLatest = {
+    version?: string;
+    lookedAt?: number;
+    trouble?: string;
+    troubleAt?: number;
+};
+
 export type AdminAppCheck = {
     check: AppWord['check'];
     minimum?: string;
+    minimumFrom?: 'setting' | 'latest';
+    latest?: AdminAppCheckLatest;
+    byWord?: boolean;
     problem?: string;
     people: AdminAppCheckPerson[];
 };
 
 export const fetchAdminAppCheck = (): Promise<AdminAppCheck> => requestJSON<AdminAppCheck>('/api/v1/admin/appcheck');
+
+export const checkAdminAppLatest = (): Promise<AdminAppCheck> => requestJSON<AdminAppCheck>('/api/v1/admin/appcheck/latest', {method: 'POST'});
 
 // GET /api/v1/admin/push, for system admins (server/push_api.go
 // pushAdminView): whether pushes can go out (on, the plugin's switch; ready,

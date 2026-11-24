@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,6 +60,11 @@ func TestAReleaseAsksOnlyGitHub(t *testing.T) {
 	require.Nil(t, r.pins)
 	require.Equal(t, manifestVersion, r.running)
 	require.Equal(t, "https://github.com/vvilla-01/matty-plugin/releases/tag/v9.9.9", r.page("9.9.9"))
+
+	// The newest Matty, for Minimum Matty version at the latest release, is
+	// asked of GitHub's API through the same runtime, and of nothing else.
+	require.Equal(t, "https://api.github.com/repos/vvilla-01/matty/releases/latest", appLatestAddress(r))
+	require.Equal(t, "matty-0.1.33.apk", appLatestAssetName("0.1.33"))
 	for address, allowed := range map[string]bool{
 		"https://github.com/x":                                true,
 		"https://GITHUB.COM/x":                                true,
@@ -172,11 +179,16 @@ func TestAReleaseNodeStartedWithTheVariablesSetIsTheSame(t *testing.T) {
 			return nil, errors.New("nothing leaves this machine in a test")
 		})
 	})
-	off, on := &configuration{}, &configuration{EnableUpdates: true}
+	off, on := &configuration{}, &configuration{EnableUpdates: true, MinimumAppVersion: "latest"}
 	p.setConfiguration(on)
+	p.appLatest().schedule = func(cluster.JobPluginAPI, func()) (clipsJob, error) { return testJob{s}, nil }
+	p.startAppLatest()
+	t.Cleanup(p.stopAppLatest)
 	p.updatesChanged(off, on)
 	p.updatesChanged(on, on)
+	p.appLatestChanged(off, on)
 	look(p)
+	p.lookForAppLatest(context.Background())
 
 	r := p.updates()
 	require.Equal(t, "https://api.github.com", r.apiBase)

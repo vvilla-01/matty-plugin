@@ -167,9 +167,9 @@ func TestTheMinimumComesBeforeTheAppCheck(t *testing.T) {
 	require.Equal(t, codeAppOutdated, codedErrorOrEmpty(a.call(http.MethodGet, "/api/v1/streams", sceneLinked, davesPhone, mattyOlder, nil)))
 	require.Equal(t, codeAppUnverified, codedErrorOrEmpty(a.call(http.MethodGet, "/api/v1/streams", sceneLinked, davesPhone, mattyEqual, nil)))
 
-	// Proved, a new enough Matty passes both, and an old one on the same
-	// session is still too old.
-	require.Equal(t, http.StatusOK, a.prove(t, sceneLinked, davesPhone, officialPhone, appSite).Code)
+	// Proved as a new enough Matty, it passes both, and an old one on the
+	// same session is still too old.
+	require.Equal(t, http.StatusOK, a.proveAs(t, sceneLinked, davesPhone, officialPhone, mattyEqual).Code)
 	require.Equal(t, http.StatusOK, a.call(http.MethodGet, "/api/v1/streams", sceneLinked, davesPhone, mattyEqual, nil).Code)
 	require.Equal(t, codeAppOutdated, codedErrorOrEmpty(a.call(http.MethodGet, "/api/v1/streams", sceneLinked, davesPhone, mattyOlder, nil)))
 }
@@ -466,7 +466,11 @@ func TestTheAppCheckCardSaysOnlyWhatTheCheckRefuses(t *testing.T) {
 	require.Contains(t, string(source), "'Each Matty proves itself when it opens, and what it found is shown to that person and here. The check refuses nobody.'")
 
 	// The minimum's line says what refuses an old Matty: this plugin's API,
-	// not chat or Mattermost itself.
-	require.Contains(t, string(source), "is refused by this plugin's API everywhere but the few places it needs to show why.`")
+	// not chat or Mattermost itself. The card's lines of the minimum are
+	// appCheckAdmin.ts's.
+	lines, err := os.ReadFile("../webapp/src/appCheckAdmin.ts")
+	require.NoError(t, err)
+	require.Contains(t, string(lines), "is refused by this plugin's API everywhere but the few places it needs to show why.`")
+	require.NotContains(t, string(lines), "is refused everywhere but the few places")
 	require.NotContains(t, string(source), "is refused everywhere but the few places")
 }

@@ -32,8 +32,9 @@ channel. See [Soundboard](#soundboard).
 This connection, and the one more for each person [talking from Matty](#talking-from-matty), to the
 same Mumble server, are the plugin's only outbound connections besides Broadcast Box itself — and,
 only if an admin switches them on, the title lookups (TMDB, Steam and IGDB), Twitch live (Twitch),
-Steam status (Steam), Hytale names (Hytale), the plugin's updates (GitHub) and UnifiedPush
-[push notifications](push.md), to the push servers people's phones name.
+Steam status (Steam), Hytale names (Hytale), the plugin's updates and **Minimum Matty version** at
+the latest release (GitHub), and UnifiedPush [push notifications](push.md), to the push servers
+people's phones name.
 
 **Not built on Matterbridge**, which was the obvious idea and does not work. Its Mumble side turns
 arrivals and departures into prose chat messages — *"Alice joined"* — for the one channel it sits

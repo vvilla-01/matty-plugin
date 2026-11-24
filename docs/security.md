@@ -82,10 +82,11 @@ What that produced, beyond the fixes themselves:
   and the chat bridge; TMDB, the Steam store and IGDB for title lookups; Twitch (`id.twitch.tv`,
   `api.twitch.tv` and `static-cdn.jtvnw.net`) for Twitch live; Steam (`steamcommunity.com` and
   `api.steampowered.com`) for Steam status; Hytale (`connect.accounts.hytale.com`) for Hytale names;
-  the UnifiedPush push servers for push notifications; and GitHub for **Look for updates**
-  (`api.github.com` for the look, and `github.com` and GitHub's file hosts under
-  `githubusercontent.com` only when a system admin presses Install). `LOCKDOWN.md` lists them host
-  by host, and gives the push notifications' outbound rule.
+  the UnifiedPush push servers for push notifications; and GitHub for **Look for updates** and for
+  **Minimum Matty version** set to the latest release (`api.github.com` for each look, and, for
+  **Look for updates**, `github.com` and GitHub's file hosts under `githubusercontent.com` only when
+  a system admin presses Install). `LOCKDOWN.md` lists them host by host, and gives the push
+  notifications' outbound rule.
 - **A push is sent only when Mattermost decides to push**, from its push hook, which the plugin
   answers at once without reading its store or the network, and never by changing or cancelling
   Mattermost's own push. It carries what Mattermost's own push carries under its push notification
@@ -370,10 +371,12 @@ Playing line, the Disconnect line and the connect steps' timings), and from 3.2.
 `build/check-awards.mjs` (the awards beside a name and the plan card), `build/check-sounds.mjs` (the
 soundboard's tiles, the upload's bytes and the loudness measure) and `build/check-mentions.mjs`
 (@names in titles), and `build/check-squeeze.mjs`, `build/check-player.mjs` (the clip player) and
-`build/check-reads.mjs` (what the panel reads of the server); `make e2e` runs the real-time recorder
-tests. A Go test reads every help text in `plugin.json`, the README, every chapter of this manual
+`build/check-reads.mjs` (what the panel reads of the server), `build/check-voice.mjs` (the In
+voice row and the Talking from Matty card), `build/check-update.mjs` (the Updates card) and
+`build/check-appcheck.mjs` (the Minimum Matty version editor and what **Results** says of the
+minimum); `make e2e` runs the real-time recorder tests. A Go test reads every help text in `plugin.json`, the README, every chapter of this manual
 and `LOCKDOWN.md`, and fails on any sentence that promises nobody outside is
-contacted without naming Twitch, Steam, Hytale, UnifiedPush and GitHub, or counts the cases and leaves one out, and another on any that says the plugin never receives audio, which
+contacted without naming Twitch, Steam, Hytale, UnifiedPush and GitHub, or counts the cases and leaves one out, another on any that ties GitHub to **Look for updates** or to the plugin's updates alone without naming **Minimum Matty version**, and another on any that says the plugin never receives audio, which
 was never quite true and is not a promise the soundboard could keep. The soundboard's player is tested
 against a Mumble server made inside the test, on the wire. See
 [Build from source](building.md#build-from-source).
@@ -407,9 +410,9 @@ one that travels with a release), and finds one of three things:
   look: System Console > Plugins > Matty > App check.
 
 The App check section of the System Console starts with a line on this: **This plugin** says "This
-plugin is a signed release of Matty Plugin 4.4.0.", "This plugin is not a signed release: a
-development build, or somebody’s own build of Matty Plugin 4.4.0." or, as an error, "This plugin’s
-files are altered. They are not as the signed release of Matty Plugin 4.4.0 has them:" and why.
+plugin is a signed release of Matty Plugin 4.5.0.", "This plugin is not a signed release: a
+development build, or somebody’s own build of Matty Plugin 4.5.0." or, as an error, "This plugin’s
+files are altered. They are not as the signed release of Matty Plugin 4.5.0 has them:" and why.
 Under it is the SHA-256 of the manifest the server sent, worked out in the browser, to compare with
 the one published with the release, and, for a release that is signed or altered, what the check
 does and does not show.
@@ -418,7 +421,7 @@ The plugin runs in every state. Any signed-in reader can ask for the manifest an
 (`GET /api/v1/release`), and **Matty checks them itself**, against its own copies of the two
 certificates, with the phone's own cryptography: both signatures first, then the manifest, whose
 version must be the one the server reports. It shows the result where it lists the plugin: "Matty
-Plugin 4.4.0 · signed release (RSA + ML-DSA)", "· not a signed release", or "· release not
+Plugin 4.5.0 · signed release (RSA + ML-DSA)", "· not a signed release", or "· release not
 verified:" and why. A phone that cannot verify ML-DSA-87 reads "not verified", never "signed" on the
 RSA signature alone. An unsigned or unverified release goes on working, in the app as in the panel.
 
@@ -484,12 +487,15 @@ Admins see the verdicts in the same section, under **Results**, after the line o
 release (see [Signed releases](#signed-releases)). **Matty apps** counts them ("3 sign-ins of 2
 people: 2 verified, 1 not verified"), says in a line what the setting does now and what a verdict
 is worth, and lists every sign-in whose verdict has not expired, newest first: the person, **Verified**,
-**Not verified** or **No longer accepted**, when, the app's version code, and the server's reason
-for any that is not verified. Past 20 there is **Show all**, and **Refresh** reads the list again;
+**Not verified** or **No longer accepted**, when, the version the app said as it proved itself
+beside its version code as Android attested it ("Matty 0.1.33 (34)"), and the server's reason for
+any that is not verified. Past 20 there is **Show all**, and **Refresh** reads the list again;
 nothing on it is saved. For each session the server keeps whether it passed and why not, when, the
-app's version, the phone's security level and boot state, and what the app says of itself, labelled
-as its own word: nothing that tells one phone from another of the same model and system. The card
-shows the first four of those, not the rest. The two requests that prove it are held to 10 a minute
+app's version code, the version the app said as it proved itself, the phone's security level and
+boot state, and what the app says of itself, labelled as its own word: nothing that tells one phone
+from another of the same model and system. The card shows the first five of those, not the rest.
+A pass kept without the version the app said counts as needing a fresh check, which the card says,
+and the app proves itself again by itself. The two requests that prove it are held to 10 a minute
 each.
 
 What it shows, and what it cannot:
@@ -519,9 +525,44 @@ What it shows, and what it cannot:
 ## A minimum Matty version
 
 **System Console > Plugins > Matty > App check > Minimum Matty version** is the oldest Matty this
-server answers, such as `0.1.32`. It is blank, and so none, until an admin sets it, and anything that
-is not three numbers such as `0.1.32` counts as none, which **Results** says under **Matty apps**.
-While one is set, **Results** says it there in a line.
+server answers. It is one of three choices:
+
+- **No minimum**, the default.
+- **The latest release of Matty**: the newest release of Matty, which this server asks GitHub for.
+  Every new release becomes the minimum as soon as this server sees it, and a Matty not yet updated
+  to it is refused until it is. Until this server has an answer, no minimum is in force.
+- **This version or newer**, with a box for a version such as `0.1.33`. Saved with the box empty,
+  it is no minimum.
+
+The setting keeps `""`, `latest` or the version. A stored value that is neither (put in some other
+way than this editor) counts as none: the editor shows it as it is, under **This version or
+newer**, and **Results** says under **Matty apps** that it counts as none. **Results** says what is
+in force there: "The oldest Matty this server answers: 0.1.33." for a version; "The oldest Matty
+this server answers: 0.1.33, the latest release. Last looked:" and when, for the latest release
+known; "Minimum Matty version is the latest release, and this server does not know it yet, so no
+minimum is in force." before the first answer; and then what it goes by (below).
+
+**The latest release.** While the setting is the latest release, and only then, this server asks
+GitHub for the newest release of Matty: one `GET` of
+`https://api.github.com/repos/vvilla-01/matty/releases/latest`, with the same client, headers, time
+and size limits as the look for the plugin's own release, of which it reads the tag, whether the
+release is a draft or a prerelease, and the names of its files. The newest Matty is the tag
+`vN.N.N` of a release that is no draft and no prerelease and holds the app, `matty-N.N.N.apk`. It
+looks once a day, once when a save makes the setting the latest release, once when the plugin
+starts with it so and no version known yet, and when an admin presses **Check now** under
+**Results**, at most once a minute for the whole server: several nodes make one look. **Look for
+updates** has nothing to do with it, and with the setting blank or a version Matty's repository is
+never asked. [`LOCKDOWN.md`](../LOCKDOWN.md) says what is sent and kept.
+
+What it found is kept for the whole server. A look that fails keeps the version known before, and
+**Results** shows the trouble and when under the line: "GitHub could not be reached.", "GitHub
+answered 503.", "The newest release of Matty holds no app to install yet." or, once a version was
+known, "GitHub says Matty has no release." A look that finds an older version than before takes
+it: the minimum follows what GitHub says is the latest. Every node answers a new minimum within
+seconds, the Mattys below it are taken out of voice, and every open client is told once.
+**Check now** is refused while the setting is anything else ("Minimum Matty version is not the
+latest release. Choose it above and save first.") and within a minute of the last look anybody
+asked for ("Somebody looked less than a minute ago. Try again in a minute.").
 
 What it does:
 
@@ -533,9 +574,22 @@ What it does:
   with "This server needs Matty 0.1.32 or newer. You have 0.1.31." It is refused before the app
   check is asked. The panel's own files and the Twitch, Steam and Hytale connect pages are outside
   it, as they are outside the app check.
+- **With Check, and refuse a Matty that fails, it goes by what the phone proved.** When a Matty
+  proves itself, the server keeps the version it said in that request beside the verdict: the app's
+  word at the moment Android vouched for the app, which is as far as a version can be proved, since
+  Android attests the package, the certificate and the version code, never the version's name. A
+  session whose verdict carries a version older than the minimum, or none, is refused after the two
+  refusals above with "Matty answers only the official Matty app, and this copy has to be checked
+  again: this server needs Matty 0.1.33 or newer, and this phone last proved Matty 0.1.32." (without
+  the last part when no version was kept). A Matty that was just updated proves itself again at
+  once, because its version code is no longer the verdict's, and passes; when that first proof comes
+  to nothing (no network), it stays refused until the person taps Try again or Refresh, or until the
+  app tries again by itself, about ten minutes later. A session that only says a newer version
+  never passes. **Results** then says "The minimum goes by what each phone proved in its check."
 - **It ends their voice.** The plugin keeps the version each Matty in voice through this server
   joined with. When a minimum comes into force, or is raised, every one that does not meet it is
-  taken out of voice and shown the same sentence. Clearing the minimum ends nobody's voice.
+  taken out of voice and shown the same sentence; with refusing on, so is every one whose session
+  proved an older version, with the sentence above. Clearing the minimum ends nobody's voice.
 - **It tells the app.** The minimum is in every `/access` answer, for everybody, whatever **Check
   the Matty app** is set to, and every open Matty is told at once when it changes. Matty 0.1.32 and
   newer, when they are older than the minimum, close this server with a page that cannot be
@@ -549,14 +603,18 @@ What it does:
 
 What it does not do:
 
-- **It is the app's own word.** A changed copy can say any version, or not say it is Matty at all,
-  and then neither the minimum nor the app check refuses it. **Check, and refuse a Matty that fails**
-  turns away only a copy that says it is Matty and is not the official build.
+- **Without refusing, it is the app's own word.** With **Check the Matty app** at **Off** or
+  **Check, and show the result**, a changed copy can say any version, and **Results** says "The
+  minimum goes by what each Matty says of itself, so a changed copy can say any version. With Check
+  the Matty app at “Check, and refuse a Matty that fails”, it goes by what the phone proved." With
+  refusing on, a copy that says it is Matty and is not the official build is turned away whatever
+  version it says; nothing stops a program that does not say it is Matty at all.
 - **It does not touch push notifications.** A Matty that registered for them before the minimum
   keeps receiving them.
 - **It does not touch the web panel**, or anything else that does not say it is Matty, and it does
-  not touch Mattermost itself: chat, and everything else that is not this plugin's.
-- **A number above the newest Matty turns every Matty away**, until it is lowered.
+  not touch Mattermost itself: chat, and everything else that is not this plugin's. No session is
+  ever revoked.
+- **A version above the newest Matty turns every Matty away**, until it is lowered.
 
 ## Notes and limitations
 

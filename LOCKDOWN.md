@@ -398,9 +398,11 @@ capability, which anybody holding it can send to, and with the phone's secret ca
 shows, so neither is ever logged, part of a key's name or shown, not even on the card, which counts
 phones by push server only.
 
-**GitHub, only if an admin switches on "Look for updates"** (off by default, under **Updates**).
-Once a day, on one node, once when the setting is switched on, and when an admin presses **Check
-now** (at most once a minute), the Mattermost server sends one `GET` to
+**GitHub, only if an admin switches on "Look for updates" or sets "Minimum Matty version" to the
+latest release** (both off by default, under **Updates** and under **App check**).
+For **Look for updates**, once a day, on one node, once when the setting is switched on, and when
+an admin presses **Check now** on its card (at most once a minute), the Mattermost server sends one
+`GET` to
 `https://api.github.com/repos/vvilla-01/matty-plugin/releases/latest`, with
 `User-Agent: MattyPlugin/<version> (Mattermost plugin; +https://github.com/vvilla-01/matty-plugin)`,
 no cookie and nothing else about this server; it gives up after 15 seconds and reads at most 256 KB,
@@ -425,7 +427,23 @@ bundle is handed out; one that a server stopping in the middle left is removed w
 minutes of the plugin's next start.
 See [Plugin updates](docs/updates.md).
 
-**The release check and the app check fetch nothing from anywhere.** The plugin checks its own
+For **Minimum Matty version** set to **The latest release of Matty**, whatever **Look for updates**
+says, once a day, on one node, once when a save makes it the latest release, once when the plugin
+starts with it so and no version known yet, and when an admin presses **Check now** under the app
+check's **Results** (at most once a minute), the Mattermost server sends one `GET` to
+`https://api.github.com/repos/vvilla-01/matty/releases/latest`, with the same `User-Agent`, no
+cookie and nothing else about this server, within the same 15 seconds and 256 KB, of which it uses
+the tag, whether the release is a draft or a prerelease, and the names of its files. Nothing is
+downloaded. A firewall that limits what the Mattermost server may reach must let it reach
+`api.github.com` on 443 while the setting is the latest release. What it keeps is in its key-value
+store: the version found, when the last look ended and the last trouble (`app_latest_seen`), when
+the daily, start or save look and **Check now** last ran (`app_latest_claim`,
+`app_latest_check_claim`), and, once the setting has been the latest release, the daily job's own
+record (`cron_app_latest`). With the setting blank or a version, Matty's repository is never asked.
+See [A minimum Matty version](docs/security.md#a-minimum-matty-version).
+
+**The release check and the app check fetch nothing from anywhere.** (The look for the newest
+Matty above is the minimum's, not the app check's.) The plugin checks its own
 files against the signatures shipped in its release, and a Matty app's proof against Google's
 attestation roots, Google's list of revoked attestation keys and GrapheneOS's boot keys,
 all of which are copies built into the release. A release that **Install** downloads, as above, is
@@ -434,8 +452,8 @@ checked against the same two certificates built in, and nothing more is fetched 
 
 **Browsers contact somebody other than this server in exactly four cases, all off by default: two
 for Twitch, one for Steam and one for Hytale; the UnifiedPush push servers above are reached by the
-Mattermost server and by phones, and GitHub, for the plugin's updates, by the Mattermost server,
-never by a browser.**
+Mattermost server and by phones, and GitHub, for the plugin's updates and for **Minimum Matty
+version** at the latest release, by the Mattermost server, never by a browser.**
 
 1. **Connect Twitch** (under "Show people live on Twitch"). The person who presses Connect Twitch
    and then Continue on Twitch has their own browser, in the window that opens, reach
@@ -476,8 +494,8 @@ In the Matty app, 3 and 4 happen in the app's own sign-in window instead of a br
 
 Apart from these four cases (Twitch's two, Connect Steam and Connect Hytale), browsers talk only to
 this server; push notifications go from this server to the UnifiedPush push servers and on to the
-phones, and the plugin's updates come from GitHub to this server, and no browser takes part in
-either. The page of a new release, which the panel's alert and Matty show system admins, is a link
+phones, and the plugin's updates and the newest Matty's version come from GitHub to this server,
+and no browser takes part in any of them. The page of a new release, which the panel's alert and Matty show system admins, is a link
 that opens GitHub only when pressed. The Steam profile button in a profile popover is an ordinary link: it opens
 steamcommunity.com only when pressed, like Watch on Twitch.
 

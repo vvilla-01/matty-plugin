@@ -305,7 +305,9 @@ type updateRuntime struct {
 	wg      sync.WaitGroup
 
 	// While the setting is on: the daily job and the minute's refresh,
-	// which onCancel ends. onLock keeps one change of them at a time.
+	// which onCancel ends. onLock keeps one change of them at a time, and a
+	// refresh holds it, so that switching the setting off or a stop returns
+	// only once no refresh is under way.
 	onLock   sync.Mutex
 	on       bool
 	onCancel context.CancelFunc
@@ -643,10 +645,17 @@ func (r *updateRuntime) updatesOnNow() bool {
 // setting goes on (or the plugin starts with it on) and then every minute.
 func (p *Plugin) updateTicks(ctx context.Context) {
 	r := p.updates()
+	refresh := func() {
+		r.onLock.Lock()
+		defer r.onLock.Unlock()
+		if ctx.Err() == nil {
+			p.refreshUpdateSeen()
+		}
+	}
 	p.safely("reading how plugin updates stand", func() {
 		r.lookLock.Lock()
 		defer r.lookLock.Unlock()
-		p.refreshUpdateSeen()
+		refresh()
 	})
 	for {
 		timer := time.NewTimer(r.tickEvery)
@@ -657,7 +666,7 @@ func (p *Plugin) updateTicks(ctx context.Context) {
 		case <-timer.C:
 		}
 
-		p.safely("the minute's look at plugin updates", p.refreshUpdateSeen)
+		p.safely("the minute's look at plugin updates", refresh)
 	}
 }
 

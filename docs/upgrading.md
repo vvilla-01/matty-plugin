@@ -2,6 +2,50 @@
 
 # Upgrading
 
+## Upgrading to 4.5.0
+
+4.5.0 can take the latest release of Matty as its minimum, so that the minimum follows each new
+release without anybody typing it in, and, with the app check refusing, holds the minimum to what
+each phone proved rather than to what the app says of itself. A minimum already set stays as it
+was, and nothing is asked of GitHub for Matty's releases until an admin chooses the latest release.
+
+- **Minimum Matty version is a choice now**: **No minimum**, **The latest release of Matty**, or
+  **This version or newer** with a box for the version. A version or a blank already saved shows as
+  that choice. The setting keeps `""`, `latest` or the version, in the same key.
+- **The latest release asks GitHub.** With it chosen, and only then, the server asks
+  `api.github.com` for Matty's newest release: once a day, once when the choice is saved, once at a
+  start while no version is known yet, and on **Check now** under **Results**, at most once a minute
+  for the whole server, whatever **Look for updates** says. A firewall that limits what the
+  Mattermost server may reach must let it reach `api.github.com` on port 443 for this. Until the
+  first answer no minimum is in force; when a look fails, the version known stays, and **Results**
+  says what went wrong. Every new release becomes the minimum as soon as the server sees it, so a
+  Matty not yet updated to it is refused until it is, and Matty 0.1.32 and newer show their update
+  page. See [A minimum Matty version](security.md#a-minimum-matty-version).
+- **With Check, and refuse a Matty that fails, the minimum goes by what the phone proved.** The
+  server keeps the version each Matty said as it proved itself with its verdict, and a session that
+  proved an older version than the minimum is refused until its Matty proves itself again; an
+  updated Matty does that at once. With the check at **Off** or **Check, and show the result**, the
+  minimum goes by what each Matty says of itself, and **Results** says so.
+- **Every Matty proves itself once more after the upgrade**, while **Check the Matty app** is not
+  **Off**, since the passes 4.4.0 kept carry no version. It does so by itself the next time it asks
+  the server; until then **Results** shows its pass as **No longer accepted**, and with refusing on
+  it is refused for the moment that takes.
+- **Results** says the minimum in force and where it comes from, when the server last looked for
+  the latest release and what went wrong, and what the minimum goes by; each sign-in's row shows
+  the version proved beside the version code, as "Matty 0.1.33 (34)".
+- **No contract change.** It is an addition to revision 4: with the check at `require` and a
+  minimum in force, `app_unverified` also refuses a session whose verdict carries an older version
+  than the minimum, or none, and `GET /access` and `GET /me` then say `none` to its Matty when that
+  Matty says a version that meets the minimum; `GET /admin/appcheck` gains `minimumFrom`, `latest`,
+  `byWord` and each session's `said`, and `POST /admin/appcheck/latest` looks at once
+  (`contract/README.md`, "The app check" and "A minimum Matty"). Matty needs no change: it already
+  reads `app.minimum`, closes a server on `app_outdated`, and proves itself again when its verdict
+  no longer counts or its version code is not the verdict's.
+- **Nothing to move.** Upgrade as usual, with `ceo.villa.matty-4.5.0-linux-amd64.tar.gz`.
+- **Going back to 4.4.0** holds the minimum to what each Matty says of itself again; a minimum of
+  `latest` counts as none there, which its **Results** says, and it asks GitHub nothing for Matty's
+  releases.
+
 ## Upgrading to 4.4.0
 
 4.4.0 can show only some of the Mumble server's channels, keeps a person's mute and deafen in step
@@ -27,7 +71,7 @@ or blank until an admin sets it, and until then the plugin does what 4.3.0 did, 
   more than one, with the channels it matches, and the lines that are not used: one longer than
   256 characters, and any after the 200th. See [Showing only some
   channels](voice.md#showing-only-some-channels).
-- **A new section, Updates: Look for updates** (off: nothing is asked of GitHub) and **Status**, a
+- **A new section, Updates: Look for updates** (off: nothing is asked of GitHub about Matty Plugin's releases) and **Status**, a
   card with **Check now**. Switched on, the server looks on GitHub for a newer release once a day,
   once when it is switched on and on **Check now**, and tells the system admins of one, in the
   panel, in Matty and in one direct message from the bot. The

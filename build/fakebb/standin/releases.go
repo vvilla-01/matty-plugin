@@ -21,14 +21,21 @@ import (
 //	GET /vvilla-01/matty-plugin/releases/tag/v<version>               the release's page, a line of text
 //	GET /fake/update/rsa.pem and /fake/update/mldsa87.pem             the certificates
 //
+// and for what it asks of the app's repository while Minimum Matty version
+// is the latest release:
+//
+//	GET /repos/vvilla-01/matty/releases/latest                        the newest Matty, as GitHub's API answers
+//
 // It serves them from a folder (fakebb -releases DIR) as
 // build/make-standin-update.sh leaves one: bundles named
 // ceo.villa.matty-<version>-<platform>.tar.gz, and rsa.pem and mldsa87.pem
 // beside them. The newest version among the bundles is the newest release,
-// with each of its bundles as a file of it. With no folder, or none in it,
-// every one of these answers 404, as GitHub answers for a repository with no
-// release yet. Only the stand-in build of the plugin (server/standin.go)
-// asks here.
+// with each of its bundles as a file of it. The newest Matty is the one line
+// of the file app-latest in the same folder, a version such as 0.1.33: a
+// release v0.1.33 whose one file is matty-0.1.33.apk. With no folder, or
+// none of these in it, or an app-latest that is not a version, each answers
+// 404, as GitHub answers for a repository with no release yet. Only the
+// stand-in build of the plugin (server/standin.go) asks here.
 //
 // Each request to one of these is logged with its method, path and status,
 // and nothing else, so a run can read from the log what was asked and see
@@ -45,7 +52,16 @@ func NewReleases(dir string) *Releases {
 	return &Releases{dir: dir, logf: log.Printf}
 }
 
-const releasesRepo = "/vvilla-01/matty-plugin"
+const (
+	releasesRepo = "/vvilla-01/matty-plugin"
+
+	// appRepo is the app's repository, and appLatestFile the file in the
+	// folder that says its newest release.
+	appRepo       = "/vvilla-01/matty"
+	appLatestFile = "app-latest"
+)
+
+var appVersion = regexp.MustCompile(`^(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$`)
 
 var standInBundleName = regexp.MustCompile(`^ceo\.villa\.matty-((?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8}))-([a-z0-9]+-[a-z0-9]+)\.tar\.gz$`)
 
@@ -55,6 +71,7 @@ func (s *Releases) Routes(mux *http.ServeMux) {
 	mux.HandleFunc(releasesRepo+"/releases/download/", s.logged(s.download))
 	mux.HandleFunc(releasesRepo+"/releases/tag/", s.logged(s.page))
 	mux.HandleFunc("/fake/update/", s.logged(s.certificate))
+	mux.HandleFunc("/repos"+appRepo+"/releases/latest", s.logged(s.appLatest))
 }
 
 // logged is handler, with one line in the log for each request once it is
@@ -212,4 +229,32 @@ func (s *Releases) certificate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	_, _ = w.Write(raw)
+}
+
+// appLatest is the newest Matty, from the folder's app-latest.
+func (s *Releases) appLatest(w http.ResponseWriter, r *http.Request) {
+	version := ""
+	if s.dir != "" {
+		if raw, err := os.ReadFile(filepath.Join(s.dir, appLatestFile)); err == nil {
+			version = strings.TrimSpace(string(raw))
+		}
+	}
+	if r.Method != http.MethodGet || !appVersion.MatchString(version) {
+		http.NotFound(w, r)
+		return
+	}
+
+	name := "matty-" + version + ".apk"
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"tag_name":   "v" + version,
+		"name":       "Matty " + version,
+		"draft":      false,
+		"prerelease": false,
+		"assets": []map[string]any{{
+			"name":                 name,
+			"size":                 0,
+			"browser_download_url": "http://" + r.Host + appRepo + "/releases/download/v" + version + "/" + name,
+		}},
+	})
 }

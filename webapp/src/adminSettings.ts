@@ -9,6 +9,7 @@ import {AdminBrand} from './components/AdminBrand';
 import {AdminChannelPictures} from './components/AdminChannelPictures';
 import {AdminClips} from './components/AdminClips';
 import {AdminMediaCache} from './components/AdminMediaCache';
+import {AdminMinimum} from './components/AdminMinimum';
 import {AdminPush} from './components/AdminPush';
 import {AdminVoice} from './components/AdminVoice';
 import {AdminSettingsBackup} from './components/AdminSettingsBackup';
@@ -44,6 +45,12 @@ export const ADMIN_SETTINGS: AdminSetting[] = [
     // The app check: this plugin's own release in one line, and who has
     // proved a genuine Matty and who has not. Read-only.
     {key: 'appchecklist', component: AdminAppCheck, showTitle: true},
+
+    // Minimum Matty version: no minimum, the latest release of Matty, or a
+    // version, stored as "", "latest" or the version in the same setting.
+    // The one editor here besides the birthday list that is saved with the
+    // page's Save button.
+    {key: 'minimumappversion', component: AdminMinimum, showTitle: true},
 
     // Updates for the plugin itself: the version running, the newest
     // release the last look found, Check now, and Install, or why a newer

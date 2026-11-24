@@ -539,8 +539,9 @@ export type ReleaseAnswer = ReleaseWord & {
 // is 'verified', 'unverified' (reason says why, in the server's words) or
 // 'none'; development beside verified when only the plugin's development
 // build would pass it; versionCode as Android attested it; minimum, the
-// oldest Matty this server answers, while one is set, which never refuses
-// the panel (server/app_check.go appWord, server/app_version.go).
+// oldest Matty this server answers, while one is in force (a version the
+// admin set, or the latest release of Matty this server knows), which never
+// refuses the panel (server/app_check.go appWord, server/app_version.go).
 export type AppWord = {
     check: 'off' | 'report' | 'require' | string;
     state: 'verified' | 'unverified' | 'none' | string;

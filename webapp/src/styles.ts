@@ -10277,6 +10277,27 @@ button.vntv-onnow.vntv-clipview-tag-chip[data-open="true"] {
     outline-offset: 2px;
 }
 
+/* Minimum Matty version: three choices that read as sentences, one under
+   the other, and the version's box under the third, in line with its words. */
+.vntv-minimum {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vntv-minimum-box {
+    margin: 6px 0 0 24px;
+}
+
+.vntv-admin .vntv-minimum-box .vntv-input {
+    width: 140px;
+    max-width: 100%;
+}
+
+.vntv-minimum-box .vntv-admin-line {
+    margin: 4px 0 0;
+}
+
 /* The console's own inputs: 34px, a hairline border, the blue glow on focus. */
 .vntv-admin .vntv-input,
 .vntv-admin .vntv-select {

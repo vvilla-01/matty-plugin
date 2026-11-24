@@ -58,7 +58,7 @@ const base = {enabled: true, running: '4.4.0', platform: 'linux-amd64', newer: f
 
 // Off, and before the first look.
 assert.deepEqual(texts({...base, enabled: false}), [
-    ['plain', 'Look for updates is off: nothing is asked of GitHub.'],
+    ['plain', 'Look for updates is off: nothing is asked of GitHub about Matty Plugin’s releases.'],
     ['quiet', 'It has not looked.'],
 ]);
 assert.deepEqual(texts(base), [

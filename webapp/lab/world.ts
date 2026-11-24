@@ -841,7 +841,7 @@ function starting(): World {
             // (the Server name and Artwork rows switch them).
             name: 'Matty',
             artwork: {emblem: false, ghost: false},
-            release: {state: 'unsigned', version: '4.4.0'},
+            release: {state: 'unsigned', version: '4.5.0'},
             app: {check: 'report', state: 'none'},
 
             // Often, in the lab, so a ghost is seen without waiting for one
@@ -1443,7 +1443,7 @@ const listeners = new Set<() => void>();
 // (server/release_check.go, server/appcheck), for a server at
 // https://chat.example.com.
 export type LabRelease = 'unsigned' | 'signed' | 'unlisted' | 'altered' | 'unreadable';
-export type LabAppCheck = 'some' | 'many' | 'empty' | 'off' | 'problem' | 'error' | 'refused';
+export type LabAppCheck = 'some' | 'many' | 'empty' | 'off' | 'problem' | 'latest' | 'unknown' | 'require' | 'error' | 'refused';
 
 // Push notifications (server/push_api.go, server/push.go): what GET
 // /admin/push holds, for the Push notifications card, and whether Mattermost
@@ -1469,7 +1469,7 @@ const LAB_MANIFEST = [
     'matty-release-manifest 1',
     `product ${PLUGIN_ID}`,
     'kind plugin',
-    'version 4.4.0',
+    'version 4.5.0',
     'platform linux-amd64',
     'files 4',
     `${'1a'.repeat(32)} 2140 assets/icon.svg`,
@@ -1484,11 +1484,11 @@ const ALTERED_REASON = 'server/dist/plugin-linux-amd64 has changed';
 export function labReleaseAnswer(): ReleaseAnswer {
     switch (labAdminNews.release) {
     case 'unsigned':
-        return {state: 'unsigned', version: '4.4.0'};
+        return {state: 'unsigned', version: '4.5.0'};
     case 'altered':
-        return {state: 'altered', version: '4.4.0', reason: ALTERED_REASON, manifest: LAB_MANIFEST};
+        return {state: 'altered', version: '4.5.0', reason: ALTERED_REASON, manifest: LAB_MANIFEST};
     default:
-        return {state: 'signed', version: '4.4.0', manifest: LAB_MANIFEST};
+        return {state: 'signed', version: '4.5.0', manifest: LAB_MANIFEST};
     }
 }
 
@@ -1597,9 +1597,23 @@ export function labPushView(): AdminPush | null {
 }
 
 // GET /admin/appcheck: the people and their sign-ins' verdicts, as the
-// server lists them. null for 'error', which the mock client answers 503;
-// 'refused' the mock client answers 403.
-export function labAppCheckView(): {check: string; minimum?: string; problem?: string; people: Array<{userId: string; username?: string; sessions: Array<Record<string, unknown>>}>} | null {
+// server lists them, each with the version its Matty said as it proved
+// itself, and the minimum in force: a version for 'some' and 'require' (the
+// check at refuse, so it goes by what each phone proved), the latest release
+// known and looked for an hour ago, with the last look's trouble, for
+// 'latest', and the latest not known yet for 'unknown'. null for 'error',
+// which the mock client answers 503; 'refused' the mock client answers 403.
+export type LabAppCheckView = {
+    check: string;
+    minimum?: string;
+    minimumFrom?: 'setting' | 'latest';
+    latest?: {version?: string; lookedAt?: number; trouble?: string; troubleAt?: number};
+    byWord?: boolean;
+    problem?: string;
+    people: Array<{userId: string; username?: string; sessions: Array<Record<string, unknown>>}>;
+};
+
+export function labAppCheckView(): LabAppCheckView | null {
     const mode = labAdminNews.appCheck;
     if (mode === 'error') {
         return null;
@@ -1608,33 +1622,56 @@ export function labAppCheckView(): {check: string; minimum?: string; problem?: s
     const now = Date.now();
     const verdict = (ago: number, extra: Record<string, unknown>) => ({at: now - ago, expires: now - ago + (30 * 24 * HOUR), ...extra});
     const stale = 'This was verified for a certificate, a boot key or a revocation list this server no longer accepts. The app proves itself again.';
+    const unproven = 'This was verified with no version of Matty kept beside it, which this server keeps with every check it counts. The app is asked to prove itself again.';
     if (mode === 'empty' || mode === 'off') {
         return {check: mode === 'off' ? 'off' : 'report', people: []};
     }
 
     const people = [
         {userId: ME_ID, username: 'victor', sessions: [
-            verdict(6 * MINUTE, {verified: true, versionCode: 28}),
-            verdict(3 * 24 * HOUR, {verified: true, development: true, versionCode: 28}),
+            verdict(6 * MINUTE, {verified: true, versionCode: 34, said: '0.1.33'}),
+            verdict(3 * 24 * HOUR, {verified: true, development: true, versionCode: 34, said: '0.1.33'}),
         ]},
-        {userId: 'u-dave', username: 'dave', sessions: [verdict(2 * HOUR, {verified: false, reason: 'This phone\'s bootloader is unlocked.', versionCode: 28})]},
-        {userId: 'u-bob', username: 'bob', sessions: [verdict(26 * HOUR, {verified: false, stale: true, reason: stale, versionCode: 27})]},
-        {userId: 'u-carol', username: 'carol', sessions: [verdict(5 * 24 * HOUR, {verified: false, reason: 'This copy of Matty was signed with a certificate this server does not accept (3F:A2:19:C0:5B:7E:D4:81).', versionCode: 28})]},
-        {userId: 'u-gone-0000000000000000000', sessions: [verdict(12 * 24 * HOUR, {verified: true, versionCode: 26})]},
+        {userId: 'u-dave', username: 'dave', sessions: [verdict(2 * HOUR, {verified: false, reason: 'This phone\'s bootloader is unlocked.', versionCode: 34, said: '0.1.33'})]},
+        {userId: 'u-bob', username: 'bob', sessions: [verdict(26 * HOUR, {verified: false, stale: true, reason: mode === 'require' ? unproven : stale, versionCode: 33})]},
+        {userId: 'u-carol', username: 'carol', sessions: [verdict(5 * 24 * HOUR, {verified: false, reason: 'This copy of Matty was signed with a certificate this server does not accept (3F:A2:19:C0:5B:7E:D4:81).', versionCode: 34, said: '0.1.33'})]},
+        {userId: 'u-gone-0000000000000000000', sessions: [verdict(12 * 24 * HOUR, {verified: true, versionCode: 32, said: '0.1.31'})]},
     ];
     if (mode === 'many') {
         for (let n = 0; n < 36; n += 1) {
             people.push({userId: `u-many-${String(n).padStart(20, '0')}`, username: `viewer${String(n + 1).padStart(3, '0')}`, sessions: [
-                verdict((n + 1) * 7 * HOUR, n % 5 === 3 ? {verified: false, reason: 'The app\'s proof does not come from Google\'s hardware attestation roots, so no phone\'s secure hardware vouches for it.'} : {verified: true, versionCode: 28}),
+                verdict((n + 1) * 7 * HOUR, n % 5 === 3 ? {verified: false, reason: 'The app\'s proof does not come from Google\'s hardware attestation roots, so no phone\'s secure hardware vouches for it.'} : {verified: true, versionCode: 34, said: '0.1.33'}),
             ]});
         }
+    }
+
+    if (mode === 'latest') {
+        return {
+            check: 'report',
+            minimum: '0.1.33',
+            minimumFrom: 'latest',
+            byWord: true,
+            latest: {version: '0.1.33', lookedAt: now - HOUR, trouble: 'GitHub could not be reached.', troubleAt: now - HOUR},
+            people,
+        };
+    }
+    if (mode === 'unknown') {
+        return {
+            check: 'report',
+            minimumFrom: 'latest',
+            latest: {lookedAt: now - (5 * MINUTE), trouble: 'GitHub answered 503.', troubleAt: now - (5 * MINUTE)},
+            people,
+        };
+    }
+    if (mode === 'require') {
+        return {check: 'require', minimum: '0.1.33', minimumFrom: 'setting', people};
     }
 
     return {
         check: 'report',
         ...(mode === 'problem' ?
             {problem: 'Not a SHA-256 digest, so left out: line 2 of More signing certificates. “0.1” in Minimum Matty version is not a version such as 0.1.32, so no minimum is in force.'} :
-            {minimum: '0.1.32'}),
+            {minimum: '0.1.33', minimumFrom: 'setting' as const, byWord: true}),
         people,
     };
 }

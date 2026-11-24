@@ -23,7 +23,8 @@ import (
 //     minutes, in one of a few slots per session, and spent by
 //     compare-and-delete, the way the connect tickets are (accounts.go);
 //   - a result, per session: verified or not and why, when, the app's
-//     version code, the security level, the boot state, and the app's own
+//     version code, the version the app said in its request (its
+//     User-Agent), the security level, the boot state, and the app's own
 //     claims, labelled as its word; a digest of the rules it was judged by;
 //     with a verdict of verified, what it was given for (the package, the
 //     signing certificate's digest, the owner's boot key when there is one,
@@ -46,9 +47,11 @@ const (
 	appCheckSessionsPerPerson = 20
 	appCheckPeopleKept        = 5000
 
-	// A verdict is remembered on each node for the gate: a pass for a
-	// minute, anything else for a few seconds, so that a Matty that has
-	// just proved itself on another node waits no longer than that.
+	// A verdict is remembered on each node for the gate: a pass that lets
+	// the gate through for a minute, anything else for a few seconds, so
+	// that a Matty that has just proved itself on another node waits no
+	// longer than that. A remembered pass that would be refused is read
+	// again before the refusal is sent (resultFor).
 	appCheckPassRemembered  = time.Minute
 	appCheckOtherRemembered = 5 * time.Second
 	appCheckRememberedMax   = 10000
@@ -86,6 +89,16 @@ type appCheckResult struct {
 	Level       string          `json:"level,omitempty"`
 	BootState   string          `json:"bootState,omitempty"`
 	Claims      *appCheckClaims `json:"claims,omitempty"`
+
+	// Said is the version the app said in the User-Agent of the request
+	// Android vouched for it in (mattyVersionOf), "" when none could be
+	// read: as far as a version name can be proved, since Android attests
+	// the package, the certificate and the versionCode, never the name.
+	// SaidKept marks a verdict that keeps it, so that "" is not taken for a
+	// verdict kept without it: a pass kept without the mark no longer counts
+	// (stillCounts). Never shown: the admins' list leaves it out.
+	Said     string `json:"said,omitempty"`
+	SaidKept bool   `json:"saidKept,omitempty"`
 
 	// What a verdict of verified was given for, kept only with one: the
 	// package and the signing certificate's digest Android attested, the
@@ -229,7 +242,8 @@ func (p *Plugin) keepResult(sessionID string, result *appCheckResult, now time.T
 	if appErr != nil || !written {
 		return errStore
 	}
-	p.rememberResult(sessionID, result, now)
+	cfg := p.getConfiguration()
+	p.rememberResult(sessionID, result, p.letThrough(result, p.stillCounts(result, cfg), cfg), now)
 
 	// The indexes only help the admins' list find results; one that could
 	// not be written leaves the verdict standing, and is said in the log.
@@ -326,47 +340,74 @@ func (p *Plugin) readResult(sessionID string, now time.Time) (*appCheckResult, e
 // memory when it is fresh enough, or nil. A verdict kept for somebody else
 // is none: a session is one person's. A verdict that no longer counts under
 // what this build and cfg accept (stillCounts) is none as well, and stale
-// says so: the app then proves itself again.
+// says so: the app then proves itself again. A remembered verdict that
+// would make the gate refuse, a stale one or a pass the minimum's step
+// refuses (appProvenText), is read again from the store first, so that a
+// proof that landed on another node counts here at once.
 func (p *Plugin) resultFor(sessionID, userID string, cfg *configuration) (result *appCheckResult, stale bool, err error) {
+	result, stale, remembered, err := p.verdictOf(sessionID, userID, cfg, false)
+	if err == nil && remembered && (stale || p.appProvenText(result, cfg) != "") {
+		result, stale, _, err = p.verdictOf(sessionID, userID, cfg, true)
+	}
+
+	return result, stale, err
+}
+
+// verdictOf is resultFor's reading: from this node's memory unless fresh or
+// it is out of date, and remembered says which.
+func (p *Plugin) verdictOf(sessionID, userID string, cfg *configuration, fresh bool) (result *appCheckResult, stale, remembered bool, err error) {
 	if sessionID == "" {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 
 	s := p.appCheck()
 	now := s.now()
 
 	s.lock.Lock()
-	remembered, known := s.remembered[sessionID]
+	kept, known := s.remembered[sessionID]
 	s.lock.Unlock()
 
-	result = remembered.result
-	if !known || now.After(remembered.until) {
+	result = kept.result
+	remembered = known && !fresh && !now.After(kept.until)
+	if !remembered {
 		if result, err = p.readResult(sessionID, now); err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
-		p.rememberResult(sessionID, result, now)
+	}
+
+	counts := result != nil && p.stillCounts(result, cfg)
+	if !remembered {
+		p.rememberResult(sessionID, result, p.letThrough(result, counts, cfg), now)
 	}
 
 	if result == nil || result.User != userID || result.Expires <= now.UnixMilli() {
-		return nil, false, nil
+		return nil, false, remembered, nil
 	}
-	if !p.stillCounts(result, cfg) {
-		return nil, true, nil
+	if !counts {
+		return nil, true, remembered, nil
 	}
 
-	return result, false, nil
+	return result, false, remembered, nil
+}
+
+// letThrough is whether a verdict that counts (or not) lets the gate
+// through under cfg: a pass that the minimum's step does not refuse.
+func (p *Plugin) letThrough(result *appCheckResult, counts bool, cfg *configuration) bool {
+	return result != nil && result.Verified && counts && p.appProvenText(result, cfg) == ""
 }
 
 // stillCounts is whether a verdict counts under what this build and cfg
 // accept now. A verdict of verified is held to what it was given for
 // (stillAccepted), so that adding an unrelated certificate to a list leaves
-// it standing. A verdict of not verified counts only under the rules it was
-// judged by (appCheckRules): any change to them may be what it failed on.
+// it standing, and counts only with the version the app said kept beside it
+// (SaidKept), so that a pass kept without it is proved again. A verdict of
+// not verified counts only under the rules it was judged by
+// (appCheckRules): any change to them may be what it failed on.
 // When this build's own lists do not read, nothing can be judged again any
 // better, and such a verdict stands.
 func (p *Plugin) stillCounts(result *appCheckResult, cfg *configuration) bool {
 	if result.Verified {
-		return p.stillAccepted(result, cfg)
+		return result.SaidKept && p.stillAccepted(result, cfg)
 	}
 
 	rules, err := p.appCheckRules(cfg)
@@ -499,11 +540,13 @@ func (p *Plugin) stillAccepted(result *appCheckResult, cfg *configuration) bool 
 	return true
 }
 
-func (p *Plugin) rememberResult(sessionID string, result *appCheckResult, now time.Time) {
+// rememberResult remembers a session's verdict on this node: for a minute
+// when it lets the gate through (letThrough), otherwise for a few seconds.
+func (p *Plugin) rememberResult(sessionID string, result *appCheckResult, letThrough bool, now time.Time) {
 	s := p.appCheck()
 
 	until := now.Add(appCheckOtherRemembered)
-	if result != nil && result.Verified {
+	if letThrough {
 		until = now.Add(appCheckPassRemembered)
 	}
 

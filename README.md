@@ -44,7 +44,7 @@
 
 <h3 align="center">Made for Matty</h3>
 
-<p align="center">The panel's API is a written contract, and Matty is built to it.<br>Releases are signed with Matty's own keys, and the server can check a phone's Matty in turn, and turn away a Matty older than the one it needs.<br>With <a href="docs/push.md">push notifications</a> on, Matty notifies through a UnifiedPush app without staying connected.<br>With <a href="docs/updates.md">Look for updates</a> on, system admins hear of a new release and install it from the System Console or from Matty.</p>
+<p align="center">The panel's API is a written contract, and Matty is built to it.<br>Releases are signed with Matty's own keys, and the server can check a phone's Matty in turn, and turn away a Matty older than the one it needs, which can be the latest release of Matty.<br>With <a href="docs/push.md">push notifications</a> on, Matty notifies through a UnifiedPush app without staying connected.<br>With <a href="docs/updates.md">Look for updates</a> on, system admins hear of a new release and install it from the System Console or from Matty.</p>
 
 <br>
 

@@ -294,19 +294,20 @@ func (b *voiceBudget) addLocked(now time.Time) {
 type voiceSession struct {
 	owner *voiceSessions
 
-	// The Mattermost account that joined, its username, and the session it
-	// joined from.
-	userID    string
-	username  string
-	sessionID string
+	// The Mattermost account that joined and its username.
+	userID   string
+	username string
 
 	// The name it has on the voice server.
 	name string
 
-	// Whether its last join said it came from Matty, and the version it
-	// said, for a change of the minimum (endOutdated).
-	matty   bool
-	version string
+	// The Mattermost session of the join that holds it, whether that join
+	// said it came from Matty, and the version it said, for a change of the
+	// minimum (endOutdated) and the sweep. A join that takes the session over
+	// writes all three under lock.
+	sessionID string
+	matty     bool
+	version   string
 
 	up   *voiceUplink
 	down *voiceDownlink
@@ -605,6 +606,12 @@ type voiceSessions struct {
 	// ("" for none): a join checks it once its session is its own.
 	minimum func() string
 
+	// The sentence a Matty's session joined from a Mattermost session ends
+	// with under a minimum, for the version its phone proved, or "": with
+	// the app check at "require", a pass kept with an older version
+	// (Plugin.voiceProvenBelow).
+	provenBelow func(userID, sessionID, minimum string) string
+
 	// How a phone session connects: dialVoiceMumble, or a test's.
 	dial func(ctx context.Context, dial voiceMumbleDial, handler voiceMumbleHandler, safely func(string, func()) bool) (*voiceMumble, error)
 
@@ -654,6 +661,7 @@ func newVoiceSessions(clock voiceClock, safely func(string, func()) bool) *voice
 		accessGone:   func(string) (bool, bool) { return false, true },
 		readSession:  func(string, string) voiceSessionRead { return voiceSessionStands },
 		minimum:      func() string { return "" },
+		provenBelow:  func(string, string, string) string { return "" },
 		dial:         dialVoiceMumble,
 		wait:         voiceTalkWait,
 		most:         voiceTalkMost,
@@ -815,7 +823,8 @@ func (r *voiceSessions) checkChannel(channel uint32, here bool) error {
 // a session it took over keeps the mute and deafen it had, and the voice
 // server is asked for nothing new. On success the session's previous peer,
 // if it had one, is told it was replaced and closed. A Matty below the
-// minimum in force by then has its session ended and is refused.
+// minimum in force by then, by its own word or by what its phone proved,
+// has its session ended and is refused.
 func (r *voiceSessions) join(ctx context.Context, ask voiceJoinAsk, dial voiceTalkDial, attach func(s *voiceSession) (voicePeer, error)) (voiceJoined, error) {
 	unlock := r.lockUser(ask.UserID)
 	defer unlock()
@@ -877,16 +886,25 @@ func (r *voiceSessions) join(ctx context.Context, ask voiceJoinAsk, dial voiceTa
 
 	// The session is this join's now, and is what it said it is.
 	s.lock.Lock()
-	s.matty, s.version = ask.Matty, ask.Version
+	if s.sessionID != ask.SessionID {
+		s.unread = 0
+	}
+	s.sessionID, s.matty, s.version = ask.SessionID, ask.Matty, ask.Version
 	s.lock.Unlock()
 
 	// A minimum that came into force while this join made its connection
 	// found no session of this person to end: the join ends it here, as
-	// endOutdated would, and is refused as the minimum's gate refuses.
-	if sentence := appOutdatedText(r.minimum(), ask.Version); ask.Matty && sentence != "" {
+	// endOutdated would, and is refused as the gate refuses.
+	minimum := r.minimum()
+	if sentence := appOutdatedText(minimum, ask.Version); ask.Matty && sentence != "" {
 		r.finish(s, voiceEnding{Code: voiceEndOff, Reason: sentence}, nil)
 
 		return voiceJoined{}, &voiceRefusal{Status: http.StatusForbidden, Code: codeAppOutdated, Sentence: sentence}
+	}
+	if sentence := r.provenBelowOf(ask.Matty, ask.UserID, ask.SessionID, minimum); sentence != "" {
+		r.finish(s, voiceEnding{Code: voiceEndOff, Reason: sentence}, nil)
+
+		return voiceJoined{}, &voiceRefusal{Status: http.StatusForbidden, Code: codeAppUnverified, Sentence: sentence}
 	}
 
 	// A phone whose connection went while it was answered (its port closed
@@ -1344,10 +1362,12 @@ func (r *voiceSessions) endFor(userID string, ending voiceEnding) {
 
 // endOutdated ends the session of every Matty that does not meet minimum,
 // as its last join said it (an older version, or none that can be read),
-// telling its phone the sentence a request of that Matty is refused with.
-// A session joined from a client that does not say it is Matty stays, and
-// no minimum ends nobody. One person at a time, so that a join taking a
-// session over has said what it is first.
+// telling its phone the sentence a request of that Matty is refused with;
+// and, with the app check at "require", the session of a Matty whose
+// Mattermost session holds a pass kept with an older version, with the
+// gate's sentence for it (provenBelow). A session joined from a client that
+// does not say it is Matty stays, and no minimum ends nobody. One person at
+// a time, so that a join taking a session over has said what it is first.
 func (r *voiceSessions) endOutdated(minimum string) {
 	if minimum == "" {
 		return
@@ -1356,14 +1376,28 @@ func (r *voiceSessions) endOutdated(minimum string) {
 	for _, s := range r.all() {
 		unlock := r.lockUser(s.userID)
 		s.lock.Lock()
-		matty, version := s.matty, s.version
+		sessionID, matty, version := s.sessionID, s.matty, s.version
 		s.lock.Unlock()
 
-		if sentence := appOutdatedText(minimum, version); matty && sentence != "" {
+		sentence := appOutdatedText(minimum, version)
+		if sentence == "" {
+			sentence = r.provenBelowOf(matty, s.userID, sessionID, minimum)
+		}
+		if matty && sentence != "" {
 			r.finish(s, voiceEnding{Code: voiceEndOff, Reason: sentence}, nil)
 		}
 		unlock()
 	}
+}
+
+// provenBelowOf is provenBelow for a session that said it is Matty, and ""
+// for one that did not.
+func (r *voiceSessions) provenBelowOf(matty bool, userID, sessionID, minimum string) string {
+	if !matty || minimum == "" {
+		return ""
+	}
+
+	return r.provenBelow(userID, sessionID, minimum)
 }
 
 // endAll ends every session with an ending: talk switched off, or the voice
@@ -1401,13 +1435,17 @@ func (r *voiceSessions) sweep() {
 			r.finish(s, voiceEndingAccess, nil)
 			continue
 		}
-		if s.sessionID == "" {
+		s.lock.Lock()
+		sessionID := s.sessionID
+		s.lock.Unlock()
+		if sessionID == "" {
 			continue
 		}
 
-		switch r.readSession(s.userID, s.sessionID) {
+		switch r.readSession(s.userID, sessionID) {
 		case voiceSessionOver:
-			r.finish(s, voiceEndingSession, nil)
+			// Unless a join from another session took it over meanwhile.
+			r.finish(s, voiceEndingSession, func(s *voiceSession) bool { return s.sessionID == sessionID })
 		case voiceSessionStands:
 			storeAnswered = true
 			s.lock.Lock()
@@ -1455,6 +1493,7 @@ func (p *Plugin) voiceTalk() *voiceSessions {
 		r.accessGone = p.voiceAccessGone
 		r.readSession = p.voiceReadSession
 		r.minimum = p.appMinimumInForce
+		r.provenBelow = p.voiceProvenBelow
 		p.voiceTalkState = r
 	})
 

@@ -180,3 +180,69 @@ func TestReleasesLogNothingUnasked(t *testing.T) {
 		t.Fatalf("%d lines", logged)
 	}
 }
+
+// The newest release of Matty is the version in the folder's app-latest,
+// with its app as its one file; absent, or not a version, 404, as GitHub
+// answers before the first release. Each request is logged as the others.
+func TestReleasesServeTheNewestMattyFromAppLatest(t *testing.T) {
+	dir := t.TempDir()
+	var lines []string
+	var lock sync.Mutex
+	releases := NewReleases(dir)
+	releases.logf = func(format string, args ...any) {
+		lock.Lock()
+		defer lock.Unlock()
+		lines = append(lines, fmt.Sprintf(format, args...))
+	}
+	mux := http.NewServeMux()
+	releases.Routes(mux)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	const address = "/repos/vvilla-01/matty/releases/latest"
+
+	if status, _ := get(t, server.URL+address); status != http.StatusNotFound {
+		t.Fatalf("no app-latest: %d", status)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "app-latest"), []byte(" 0.1.33\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	status, body := get(t, server.URL+address)
+	if status != http.StatusOK {
+		t.Fatalf("app-latest: %d", status)
+	}
+	var answer struct {
+		TagName    string `json:"tag_name"`
+		Draft      bool   `json:"draft"`
+		Prerelease bool   `json:"prerelease"`
+		Assets     []struct {
+			Name string `json:"name"`
+		} `json:"assets"`
+	}
+	if err := json.Unmarshal(body, &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.TagName != "v0.1.33" || answer.Draft || answer.Prerelease || len(answer.Assets) != 1 || answer.Assets[0].Name != "matty-0.1.33.apk" {
+		t.Fatalf("answer: %s", body)
+	}
+
+	// The plugin's own releases are not the app's.
+	if status, _ := get(t, server.URL+"/repos/vvilla-01/matty-plugin/releases/latest"); status != http.StatusNotFound {
+		t.Fatalf("the plugin's latest: %d", status)
+	}
+
+	for _, content := range []string{"", "latest", "v0.1.33", "0.1", "0.1.33\n0.1.34\n"} {
+		if err := os.WriteFile(filepath.Join(dir, "app-latest"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if status, _ := get(t, server.URL+address); status != http.StatusNotFound {
+			t.Fatalf("app-latest %q: %d", content, status)
+		}
+	}
+
+	lock.Lock()
+	defer lock.Unlock()
+	if len(lines) != 8 || lines[0] != `release request: GET "/repos/vvilla-01/matty/releases/latest" 404` || lines[1] != `release request: GET "/repos/vvilla-01/matty/releases/latest" 200` {
+		t.Fatalf("logged:\n%s", strings.Join(lines, "\n"))
+	}
+}

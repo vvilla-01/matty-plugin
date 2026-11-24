@@ -945,6 +945,60 @@ func TestTheDailyLookExistsOnlyWhileTheSettingIsOn(t *testing.T) {
 	require.Equal(t, 2, s.closed)
 }
 
+// A refresh under way when the setting goes off ends before the switch
+// returns: once it has returned, nothing of the minute's work reads the
+// store or changes this node's copy.
+func TestTheMinutesRefreshEndsBeforeTheSettingGoesOff(t *testing.T) {
+	s := newUpdateScene(t)
+	s.github.releases("v"+testRunning, false, false)
+	p := s.nodeWith(false, func(r *updateRuntime) { r.tickEvery = 5 * time.Millisecond })
+	off, on := &configuration{}, &configuration{EnableUpdates: true}
+	p.setConfiguration(on)
+	p.updatesChanged(off, on)
+	require.Eventually(t, func() bool { return len(s.kv(kvUpdateSeen)) > 0 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+
+	// The next refresh is held in its read, which then finds a newer word.
+	newer, _ := json.Marshal(updateSeen{Latest: "4.12.0", LookedAt: 8})
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s.faults.setOnRead(func(key string) {
+		if key != kvUpdateSeen {
+			return
+		}
+		once.Do(func() {
+			close(entered)
+			<-release
+			s.store[kvUpdateSeen] = newer
+		})
+	})
+	<-entered
+
+	atOff := make(chan string, 1)
+	go func() {
+		p.setConfiguration(off)
+		p.updatesChanged(on, off)
+		atOff <- p.updates().seenNow().Latest
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	seen := <-atOff
+
+	time.Sleep(50 * time.Millisecond)
+	require.Equal(t, seen, p.updates().seenNow().Latest, "a refresh changed the copy after the setting went off")
+	reads := 0
+	s.faults.setOnRead(func(key string) {
+		if key == kvUpdateSeen {
+			reads++
+		}
+	})
+	time.Sleep(50 * time.Millisecond)
+	s.faults.setOnRead(nil)
+	s.faults.lock.Lock()
+	defer s.faults.lock.Unlock()
+	require.Zero(t, reads, "the store read while the setting is off")
+}
+
 // Check now looks at once, once a minute for the whole server, whichever
 // node is asked; turning the setting on looks once, on one node.
 func TestCheckNowAndTurningOnLookOnceForTheWholeServer(t *testing.T) {

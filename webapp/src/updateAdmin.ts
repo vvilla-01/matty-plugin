@@ -58,7 +58,7 @@ export function updateLines(view: AdminUpdate, when: (at: number) => string, fai
     if (view.enabled) {
         lines.push({text: 'Once a day it looks on GitHub for a newer release, and tells the system admins.', tone: 'plain'});
     } else {
-        lines.push({text: 'Look for updates is off: nothing is asked of GitHub.', tone: 'plain'});
+        lines.push({text: 'Look for updates is off: nothing is asked of GitHub about Matty Plugin’s releases.', tone: 'plain'});
     }
 
     if (!view.lookedAt) {

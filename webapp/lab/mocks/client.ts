@@ -1388,6 +1388,21 @@ export const fetchAdminAppCheck = (): Promise<AdminAppCheck> => answer(() => {
     return view as AdminAppCheck;
 });
 
+// Check now for the newest Matty: refused as the server refuses it while
+// the setting is not the latest release; otherwise the look finds 0.1.33,
+// as the server would, and the card comes back without the trouble.
+export const checkAdminAppLatest = (): Promise<AdminAppCheck> => answer(() => {
+    const view = labAppCheckView();
+    if (!view) {
+        throw refused(503, 'store', 'This server could not read how the latest Matty stands just now. Try again in a moment.');
+    }
+    if (view.minimumFrom !== 'latest') {
+        throw refused(409, 'conflict', 'Minimum Matty version is not the latest release. Choose it above and save first.');
+    }
+
+    return {...view, minimum: '0.1.33', byWord: view.check !== 'require', latest: {version: '0.1.33', lookedAt: Date.now()}} as AdminAppCheck;
+});
+
 // Push notifications' state, for a system admin, as the Push notifications
 // row has it; the store not answering for "cannot read", and the server's
 // refusal for anybody else for "refused".

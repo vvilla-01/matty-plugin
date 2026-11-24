@@ -37,7 +37,11 @@ import (
 // is and what was found (appWord). With the setting at "require", a request
 // that says it is Matty (its User-Agent) and whose session has not passed is
 // refused on every route but the five a Matty needs to prove itself and to
-// show why it cannot (passAppCheckGate). Whatever else asks, the web panel
+// show why it cannot (passAppCheckGate). While a minimum is in force too
+// (app_version.go), a session that passed is refused as well when the
+// version the app said as it proved itself is older than the minimum, or
+// could not be read: under "require" the minimum goes by what the phone
+// proved, not by what a request says now. Whatever else asks, the web panel
 // included, is never refused by it: nothing Mattermost gives a plugin tells
 // the panel from a program that hides what it is.
 //
@@ -102,8 +106,8 @@ type appWord struct {
 	// it, so the app knows to prove itself again once it is updated.
 	VersionCode int64 `json:"versionCode,omitempty"`
 
-	// Minimum is the oldest Matty this server answers, while one is set,
-	// whatever the check's setting (app_version.go).
+	// Minimum is the oldest Matty this server answers, while one is in
+	// force, whatever the check's setting (app_version.go).
 	Minimum string `json:"minimum,omitempty"`
 }
 
@@ -115,10 +119,15 @@ func sessionOf(c *plugin.Context) string {
 	return c.SessionId
 }
 
-// appWordFor is the caller's appWord. A store that cannot be read is said as
-// none, with why: /access never fails over this.
-func (p *Plugin) appWordFor(sessionID, userID string, cfg *configuration) appWord {
-	word := appWord{Check: cfg.appCheckMode(), State: "none", Minimum: cfg.appMinimum()}
+// appWordFor is the caller's appWord, asked with the User-Agent agent. A
+// store that cannot be read is said as none, with why: /access never fails
+// over this. A pass the minimum's step of the gate refuses (appProvenText)
+// is said as none, with its sentence, to a Matty whose own word meets the
+// minimum, so that it proves itself again rather than asking what is
+// refused; to a Matty below the minimum, which is closed behind its update
+// page, and to anything that does not say it is Matty, it is said as it is.
+func (p *Plugin) appWordFor(sessionID, userID, agent string, cfg *configuration) appWord {
+	word := appWord{Check: cfg.appCheckMode(), State: "none", Minimum: p.appMinimumFor(cfg)}
 	if word.Check == appCheckOff {
 		return word
 	}
@@ -131,6 +140,11 @@ func (p *Plugin) appWordFor(sessionID, userID string, cfg *configuration) appWor
 		word.Reason = appCheckRulesChangedText
 	case result == nil:
 	case result.Verified:
+		if refusal := p.appProvenText(result, cfg); refusal != "" && strings.HasPrefix(agent, mattyUserAgent) &&
+			appOutdatedText(word.Minimum, mattyVersionOf(agent)) == "" {
+			word.Reason = refusal
+			break
+		}
 		word.State = "verified"
 		word.Development = result.Development
 		word.VersionCode = result.VersionCode
@@ -144,9 +158,11 @@ func (p *Plugin) appWordFor(sessionID, userID string, cfg *configuration) appWor
 }
 
 // passAppCheckGate refuses a Matty whose session has not passed, while the
-// setting is "require". True when the request may go on; otherwise it has
-// answered. Every route but the exempt ones, the clips included, comes
-// through here.
+// setting is "require", and then one whose session passed with a version
+// older than the minimum in force (appProvenText). True when the request may
+// go on; otherwise it has answered. Every route but the exempt ones, the
+// clips included, comes through here, after the minimum's own gate
+// (passAppVersionGate).
 func (p *Plugin) passAppCheckGate(w http.ResponseWriter, r *http.Request, c *plugin.Context, userID string) bool {
 	if appCheckExemptRequest(r) || !strings.HasPrefix(r.UserAgent(), mattyUserAgent) {
 		return true
@@ -167,7 +183,15 @@ func (p *Plugin) passAppCheckGate(w http.ResponseWriter, r *http.Request, c *plu
 		return false
 	}
 	if result != nil && result.Verified {
-		return true
+		message := p.appProvenText(result, cfg)
+		if message == "" {
+			return true
+		}
+
+		w.Header().Set("Cache-Control", "no-store")
+		writeCodedError(w, http.StatusForbidden, message, codeAppUnverified)
+
+		return false
 	}
 
 	message := p.brandName() + " answers only the official Matty app, and this copy has not been checked yet."
@@ -182,6 +206,52 @@ func (p *Plugin) passAppCheckGate(w http.ResponseWriter, r *http.Request, c *plu
 	writeCodedError(w, http.StatusForbidden, message, codeAppUnverified)
 
 	return false
+}
+
+// appProvenText is the gate's refusal of a pass under cfg for the version
+// kept with it, or "" when that lets it through: with the setting at
+// "require" and a minimum in force, a pass whose app said a version older
+// than the minimum, or none that could be read, as it proved itself.
+func (p *Plugin) appProvenText(result *appCheckResult, cfg *configuration) string {
+	if result == nil || !result.Verified || cfg.appCheckMode() != appCheckRequire {
+		return ""
+	}
+
+	return p.appProvenBelowText(p.appMinimumFor(cfg), result)
+}
+
+// appProvenBelowText is the refusal of a pass whose kept version is older
+// than minimum, or none, or "" when it meets it or there is no minimum.
+func (p *Plugin) appProvenBelowText(minimum string, result *appCheckResult) string {
+	if minimum == "" || result == nil || !result.Verified || (result.Said != "" && !newerVersion(minimum, result.Said)) {
+		return ""
+	}
+
+	message := p.brandName() + " answers only the official Matty app, and this copy has to be checked again: this server needs Matty " + minimum + " or newer"
+	if result.Said != "" {
+		message += ", and this phone last proved Matty " + result.Said
+	}
+
+	return message + "."
+}
+
+// voiceProvenBelow is the sentence a voice session joined from sessionID
+// ends with under minimum: the gate's refusal of its pass, read from the
+// store, while the setting is "require". A verdict that cannot be read, a
+// stale one, one that failed, or none at all ends nobody: that is the app
+// check's matter, not the minimum's.
+func (p *Plugin) voiceProvenBelow(userID, sessionID, minimum string) string {
+	cfg := p.getConfiguration()
+	if minimum == "" || sessionID == "" || cfg.appCheckMode() != appCheckRequire {
+		return ""
+	}
+
+	result, stale, _, err := p.verdictOf(sessionID, userID, cfg, true)
+	if err != nil || stale {
+		return ""
+	}
+
+	return p.appProvenBelowText(minimum, result)
 }
 
 // appCheckPolicy is what this build accepts, with the settings' additions.
@@ -347,7 +417,12 @@ func (p *Plugin) handleAppAttest(w http.ResponseWriter, r *http.Request, c *plug
 		return
 	}
 
-	result := &appCheckResult{User: userID, At: now.UnixMilli(), Expires: expires, Claims: cleanClaims(request.Claims)}
+	// The version the app says it is, kept with the verdict as what this
+	// phone proved (Said).
+	result := &appCheckResult{
+		User: userID, At: now.UnixMilli(), Expires: expires, Claims: cleanClaims(request.Claims),
+		Said: mattyVersionOf(r.UserAgent()), SaidKept: true,
+	}
 	// The rules it is judged by, from the same settings as the judging. When
 	// this build's lists do not read, judge says so, and none are kept.
 	result.Rules, _ = p.appCheckRules(cfg)
@@ -493,6 +568,7 @@ type appCheckSessionView struct {
 const (
 	staleAppCheckReason           = "This was verified for a certificate, a boot key or a revocation list this server no longer accepts. The app is asked to prove itself again."
 	staleUnverifiedAppCheckReason = "This failed the check under rules this server has changed since. The app is asked to prove itself again."
+	staleUnprovenAppCheckReason   = "This was verified with no version of Matty kept beside it, which this server keeps with every check it counts. The app is asked to prove itself again."
 )
 
 type appCheckPersonView struct {
@@ -504,22 +580,34 @@ type appCheckPersonView struct {
 // appCheckAdminView is GET /api/v1/admin/appcheck: every person with a
 // verdict that has not expired, the latest first, and each of their
 // sessions'. "claims" in each is the app's own word. Minimum is the oldest
-// Matty this server answers, while one is set; Problem says which lines of
-// the two lists of digests were left out, and that Minimum Matty version
-// counts as none when it is not a version.
+// Matty this server answers, while one is in force, and MinimumFrom where
+// the setting takes it from ("setting" or "latest", left out for none);
+// Latest is how the look for the newest Matty stands, only while the
+// setting is the latest release (app_latest.go). Problem says which lines
+// of the two lists of digests were left out, and that Minimum Matty version
+// counts as none when it is neither a version nor the latest release.
+// ByWord is set while a minimum is in force and the check is not at
+// "require": the minimum then goes by what each Matty says of itself, and
+// with "require" by what each phone proved. Each session's "said" is the
+// version kept with its verdict.
 type appCheckAdminView struct {
-	Check   string               `json:"check"`
-	Minimum string               `json:"minimum,omitempty"`
-	Problem string               `json:"problem,omitempty"`
-	People  []appCheckPersonView `json:"people"`
+	Check       string               `json:"check"`
+	Minimum     string               `json:"minimum,omitempty"`
+	MinimumFrom string               `json:"minimumFrom,omitempty"`
+	ByWord      bool                 `json:"byWord,omitempty"`
+	Latest      *appLatestSeen       `json:"latest,omitempty"`
+	Problem     string               `json:"problem,omitempty"`
+	People      []appCheckPersonView `json:"people"`
 }
+
+const appCheckAdminOnlyText = "Only a system admin can see the app check's results."
 
 // handleAdminAppCheck answers GET /api/v1/admin/appcheck, for system admins.
 func (p *Plugin) handleAdminAppCheck(w http.ResponseWriter, r *http.Request, userID string) {
 	w.Header().Set("Cache-Control", "no-store")
 
 	if !p.isSystemAdmin(userID) {
-		writeError(w, http.StatusForbidden, "Only a system admin can see the app check's results.")
+		writeError(w, http.StatusForbidden, appCheckAdminOnlyText)
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -527,10 +615,22 @@ func (p *Plugin) handleAdminAppCheck(w http.ResponseWriter, r *http.Request, use
 		return
 	}
 
+	p.writeAppCheckAdmin(w)
+}
+
+// writeAppCheckAdmin writes the admin card as it stands, or 503 when the
+// store cannot be read.
+func (p *Plugin) writeAppCheckAdmin(w http.ResponseWriter) {
 	cfg := p.getConfiguration()
 	now := p.appCheck().now()
 	problem := strings.TrimSpace(cfg.appCheckProblem() + " " + cfg.appMinimumProblem())
-	view := appCheckAdminView{Check: cfg.appCheckMode(), Minimum: cfg.appMinimum(), Problem: problem, People: []appCheckPersonView{}}
+	view := appCheckAdminView{Check: cfg.appCheckMode(), Minimum: p.appMinimumFor(cfg), MinimumFrom: cfg.appMinimumFrom(), Problem: problem, People: []appCheckPersonView{}}
+	if cfg.appMinimumLatest() {
+		latest := p.appLatestNow()
+		view.Latest = &latest
+		view.Minimum = latest.Version
+	}
+	view.ByWord = view.Minimum != "" && view.Check != appCheckRequire
 
 	people, err := p.readIndex(kvAppCheckPeople, now)
 	if err != nil {
@@ -554,12 +654,16 @@ func (p *Plugin) handleAdminAppCheck(w http.ResponseWriter, r *http.Request, use
 			}
 			if result != nil && result.User == person {
 				session := appCheckSessionView{Session: sessionID, appCheckResult: *result}
-				session.Rules = ""
+				session.Rules, session.SaidKept = "", false
 				if !p.stillCounts(result, cfg) {
 					session.Stale = true
-					session.Reason = staleUnverifiedAppCheckReason
-					if result.Verified {
+					switch {
+					case result.Verified && !result.SaidKept:
+						session.Reason = staleUnprovenAppCheckReason
+					case result.Verified:
 						session.Reason = staleAppCheckReason
+					default:
+						session.Reason = staleUnverifiedAppCheckReason
 					}
 					session.Verified, session.Development = false, false
 				}

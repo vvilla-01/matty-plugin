@@ -449,14 +449,14 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 			writeError(w, http.StatusMethodNotAllowed, "Method not allowed.")
 			return
 		}
-		p.handleMeIn(w, userID, sessionOf(c))
+		p.handleMeIn(w, userID, sessionOf(c), r.UserAgent())
 
 	case "/api/v1/access":
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "Method not allowed.")
 			return
 		}
-		p.handleAccess(w, userID, sessionOf(c))
+		p.handleAccess(w, userID, sessionOf(c), r.UserAgent())
 
 	// Whether this plugin is a signed release, and the release's manifest and
 	// signatures for a client to verify: see release_check.go.
@@ -485,6 +485,11 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 
 	case "/api/v1/admin/appcheck":
 		p.handleAdminAppCheck(w, r, userID)
+
+	// Check now for the newest Matty, while Minimum Matty version is the
+	// latest release: see app_latest.go.
+	case "/api/v1/admin/appcheck/latest":
+		p.handleAdminAppLatestCheck(w, r, userID)
 
 	// Push notifications through UnifiedPush: a Matty's own registration
 	// for its session, its confirmation and a test, each metered in its
@@ -1042,7 +1047,7 @@ type accessResponse struct {
 // locked. Asking /me for that reads every connected-account document and
 // builds a page of settings each time; this is the same answer to the one
 // question, from the one read it needs.
-func (p *Plugin) handleAccess(w http.ResponseWriter, userID, sessionID string) {
+func (p *Plugin) handleAccess(w http.ResponseWriter, userID, sessionID, agent string) {
 	cfg := p.getConfiguration()
 
 	w.Header().Set("Cache-Control", "no-store")
@@ -1055,7 +1060,7 @@ func (p *Plugin) handleAccess(w http.ResponseWriter, userID, sessionID string) {
 		Name:       p.brandName(),
 		Artwork:    p.artwork(),
 		Release:    p.releaseWordNow(),
-		App:        p.appWordFor(sessionID, userID, cfg),
+		App:        p.appWordFor(sessionID, userID, agent, cfg),
 		Push:       p.pushWordNow(cfg),
 		Voice:      p.voiceWordNow(cfg),
 	}
@@ -1081,11 +1086,12 @@ func (p *Plugin) handleAccess(w http.ResponseWriter, userID, sessionID string) {
 
 // handleMe is /me for a caller with no session to speak of, as tests ask.
 func (p *Plugin) handleMe(w http.ResponseWriter, userID string) {
-	p.handleMeIn(w, userID, "")
+	p.handleMeIn(w, userID, "", "")
 }
 
-// handleMeIn answers GET /api/v1/me for the caller's session.
-func (p *Plugin) handleMeIn(w http.ResponseWriter, userID, sessionID string) {
+// handleMeIn answers GET /api/v1/me for the caller's session, asked with
+// the User-Agent agent.
+func (p *Plugin) handleMeIn(w http.ResponseWriter, userID, sessionID, agent string) {
 	cfg := p.getConfiguration()
 
 	w.Header().Set("Cache-Control", "no-store")
@@ -1097,7 +1103,7 @@ func (p *Plugin) handleMeIn(w http.ResponseWriter, userID, sessionID string) {
 		Name:        p.brandName(),
 		Artwork:     p.artwork(),
 		Release:     p.releaseWordNow(),
-		App:         p.appWordFor(sessionID, userID, cfg),
+		App:         p.appWordFor(sessionID, userID, agent, cfg),
 		Access:      accessUnknown,
 		BadgeOn:     cfg.EnableLiveBadge,
 		AutoLink:    cfg.AutoLinkByUsername,

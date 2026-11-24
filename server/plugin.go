@@ -22,7 +22,7 @@ const (
 	// manifestVersion must match the version in plugin.json; build/check-version.py
 	// fails the build if the two drift apart. It is recorded in the airtime
 	// backup so an admin can see which build took the copy.
-	manifestVersion = "4.4.0"
+	manifestVersion = "4.5.0"
 
 	// contractRevision is the number of the client contract this server
 	// speaks (contract/README.md): the routes, events and documents a client
@@ -774,6 +774,12 @@ type Plugin struct {
 	updateOnce  sync.Once
 	updateState *updateRuntime
 
+	// The latest release of Matty as the minimum: this node's copy of the
+	// last look, the daily job and the minute's read, made on first use.
+	// See app_latest.go.
+	appLatestOnce  sync.Once
+	appLatestState *appLatestRuntime
+
 	// The player on the Mumble connection held now, under voiceLock beside
 	// voiceClient, with which it shares a lifetime. See sounds_play.go.
 	soundPlayer *soundPlayer
@@ -954,6 +960,11 @@ func (p *Plugin) usualStarters() []starter {
 		// Updates for the plugin itself: whether Mattermost takes uploads,
 		// leftovers swept, and, while the setting is on, the daily look.
 		{"plugin updates", p.startUpdates},
+
+		// The newest Matty, while Minimum Matty version is the latest
+		// release: the last look as kept, the daily look, and a look when
+		// no version is known yet. Otherwise nothing is asked.
+		{"the newest Matty", p.startAppLatest},
 	}
 }
 
@@ -1057,6 +1068,9 @@ func (p *Plugin) stopUsual() {
 	// The daily look ended, waited for five seconds at most while under
 	// way, and a bundle being prepared cancelled.
 	p.stopUpdates()
+
+	// The daily look for the newest Matty and the minute's read ended.
+	p.stopAppLatest()
 
 	// Leave nobody wearing a live badge we can no longer clear.
 	p.clearAllBadges()
@@ -1162,7 +1176,7 @@ func (p *Plugin) OnConfigurationChange() error {
 		// again when the app check's setting or what it accepts has changed,
 		// and proves itself if its verdict no longer counts, or when the
 		// oldest Matty this server answers has: one event for any of them.
-		minimumChanged := previous != nil && previous.appMinimum() != cfg.appMinimum()
+		minimumChanged := previous != nil && p.appMinimumFor(previous) != p.appMinimumFor(&cfg)
 		if (previous != nil && previous.Name != cfg.Name) || appCheckChanged || minimumChanged {
 			p.tellEverybodyMe()
 		}
@@ -1171,9 +1185,9 @@ func (p *Plugin) OnConfigurationChange() error {
 		// Matty here that does not meet it, with the sentence its requests
 		// are now refused with. On its own goroutine, with the minimum in
 		// force when it runs: this hook holds up Save.
-		if minimumChanged && cfg.appMinimum() != "" {
+		if minimumChanged && p.appMinimumFor(&cfg) != "" {
 			p.goSafely("ending the voice of a Matty below the minimum", func() {
-				p.voiceTalk().endOutdated(p.getConfiguration().appMinimum())
+				p.voiceTalk().endOutdated(p.appMinimumInForce())
 			})
 		}
 
@@ -1237,6 +1251,11 @@ func (p *Plugin) OnConfigurationChange() error {
 		// read again, the daily look follows the setting, and switched on,
 		// one node looks at once.
 		p.updatesChanged(previous, &cfg)
+
+		// The newest Matty: the daily look follows Minimum Matty version,
+		// and a save that makes it the latest release looks at once, on one
+		// node.
+		p.appLatestChanged(previous, &cfg)
 
 		// Renaming the bot is a write to Mattermost, so it only happens when
 		// the name has actually changed. On its own goroutine: this hook holds

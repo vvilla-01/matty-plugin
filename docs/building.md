@@ -132,13 +132,13 @@ identity, and the SHA-256 of the two certificates.
 as a command, so a bundle, or an unpacked plugin folder, can be checked before it is installed:
 
 ```bash
-go run ./build/checkrelease dist/ceo.villa.matty-4.4.0-linux-amd64.tar.gz
+go run ./build/checkrelease dist/ceo.villa.matty-4.5.0-linux-amd64.tar.gz
 ```
 
 It checks both signatures before it reads anything in the manifest, then the product, the kind, the
 version and the platforms, then every listed file's size and SHA-256, and that what Mattermost loads
 (`plugin.json`, the executables and the web panel's bundle) is listed. It prints
-`signed: ceo.villa.matty 4.4.0 linux-amd64, <n> files`, `unsigned: there is no release folder`, or
+`signed: ceo.villa.matty 4.5.0 linux-amd64, <n> files`, `unsigned: there is no release folder`, or
 `altered:` and why; then the manifest's SHA-256, the two certificates it checked against, and any
 files in the folder that nobody signed. It exits 0 for a signed release, 1 for anything else and 2
 when it was not asked properly. `-rsa-cert` and `-mldsa-cert` check against other certificates,
@@ -418,10 +418,12 @@ Broadcast Box  ←── /api/status (poll) ──────────┐
   runtime beyond Broadcast Box and, when voice is on, Mumble; the optional exceptions are
   [Movies and games][movies-and-games-optional], [Twitch][twitch-optional],
   [Steam][steam-optional], [Hytale][hytale-optional], GitHub for [Plugin
-  updates][updates-optional], and [UnifiedPush push notifications](push.md), all off by default. **Browsers
+  updates][updates-optional] and for **Minimum Matty version** set to the latest release, and
+  [UnifiedPush push notifications](push.md), all off by default. **Browsers
   contact somebody other than this server in exactly four cases, all off by default: two for Twitch,
   one for Steam and one for Hytale; the UnifiedPush push servers are reached by the server and by
-  phones, and GitHub, for the plugin's updates, by the server, never by a browser.** (1) The person who presses Connect Twitch and then Continue on Twitch,
+  phones, and GitHub, for the plugin's updates and for **Minimum Matty version** at the latest
+  release, by the server, never by a browser.** (1) The person who presses Connect Twitch and then Continue on Twitch,
   in the window that opens, reaches `id.twitch.tv` and Twitch's sign-in pages; (2) a viewer who
   presses play on a Twitch stream while **Play Twitch streams inside Matty** is on loads Twitch's
   player, which talks to Twitch and its advertising and measurement partners; (3) the person who
@@ -509,6 +511,11 @@ answers, while an admin has set one ([A minimum Matty version](security.md#a-min
 Matty older than that minimum, or whose User-Agent says no version, is refused with `403` and
 `app_outdated` on the same routes as `app_unverified`, before the app check is asked, and its voice
 session ends when the minimum comes into force.
+From 4.5.0 the minimum may be the latest release of Matty, which the server asks GitHub for, and is
+in `minimum` once the server knows it. With the check at `require`, a session whose verdict carries
+an older version than the minimum, or none, is refused with `app_unverified` too, and `GET /access`
+and `GET /me` say `none` to its Matty while that Matty says a version that meets the minimum, so
+that it proves itself again ([A minimum Matty version](security.md#a-minimum-matty-version)).
 
 The rest of this section is the part about people's Steam and Hytale accounts, new in 3.4.0.
 

@@ -144,8 +144,10 @@ type configuration struct {
 
 	// 4.4.0: whether this server looks for updates of the plugin itself
 	// (update.go), off unless an admin switches it on, and with it off
-	// nothing is asked of GitHub. Then the oldest Matty this server answers
-	// (app_version.go): "N.N.N", and blank, or anything else, for none.
+	// nothing is asked of GitHub for the plugin. Then the oldest Matty this
+	// server answers (app_version.go): "N.N.N", "latest" for the newest
+	// release of Matty (app_latest.go), and blank, or anything else, for
+	// none.
 	EnableUpdates     bool
 	MinimumAppVersion string
 
